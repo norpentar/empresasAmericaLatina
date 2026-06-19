@@ -1,0 +1,49 @@
+---
+title: "Finantials"
+output: html_document
+date: "2025-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+library(dplyr)
+#library(neo4r)
+library(visNetwork)
+library(bolt4jr)
+library(reticulate)
+
+use_virtualenv("~/.venvs/neo4j_env", required = TRUE)
+
+user_neo4j <- "neo4j"
+password_neo4j <- "norpentar"
+
+```
+
+
+
+Tabla de variables financieras por empresas.
+
+```{r}
+source("./run.R")
+```
+
+
+Valor en monedas nacionales y en dólares, ajustados a 1990.
+
+```{r}
+tabla <- lista_empresas_principales$tablaFinancialsEmpresas() %>% select(-valor_ajustado) %>% pivot_wider(names_from = anho, values_from = valor)
+
+for (var in unique(tabla$variable)){
+  tabla_aux <- tabla %>% filter(variable==var)
+  write.csv(tabla_aux, file = paste("./export/tablas/financials/variables/currency_nacional/tabla_variables_",var,"_currency_nacional.csv",sep=""))
+}
+
+tabla <- lista_empresas_principales$tablaFinancialsEmpresas() %>% select(-valor) %>% pivot_wider(names_from = anho, values_from = valor_ajustado)
+
+for (var in unique(tabla$variable)){
+  tabla_aux <- tabla %>% filter(variable==var)
+  write.csv(tabla_aux, file = paste("./export/tablas/financials/variables/usd_1990/tabla_variables_",var,"_usd_1990.csv",sep=""))
+}
+```
+
+

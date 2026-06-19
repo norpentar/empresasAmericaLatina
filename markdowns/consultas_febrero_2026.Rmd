@@ -1,0 +1,961 @@
+---
+title: "Finantials"
+output: html_document
+date: "2025-10-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+library(dplyr)
+#library(neo4r)
+library(visNetwork)
+library(bolt4jr)
+library(reticulate)
+library(readxl)
+
+
+use_virtualenv("~/.venvs/neo4j_env", required = TRUE)
+
+user_neo4j <- "neo4j"
+password_neo4j <- "norpentar"
+
+```
+
+Cargo las matrices principales con las que voy a trabajar.
+
+```{r}
+query_1 <- "
+match (empresa{entidad_principal: 'si'})<-[r:accionista]-(accionista) 
+return
+accionista.name,
+accionista.country_region,
+r.outstanding,
+r.value,
+r.value_ajustado,
+empresa.name,
+empresa.ultimate_parent,
+empresa.incorporated_date,
+empresa.grupo_familiar,
+empresa.country_region,
+empresa.industry,
+empresa.industry_reclassified,
+empresa.industry_reclassified_2,
+empresa.market_cap,
+empresa.market_cap_ajustado,
+empresa.total_revenue,
+empresa.total_revenue_ajustado
+"
+query_2 <- "
+match (empresa{entidad_principal: 'si'})<-[r:accionista]-(accionista) 
+with distinct empresa
+return
+empresa.name,
+empresa.ultimate_parent,
+empresa.incorporated_date,
+empresa.grupo_familiar,
+empresa.country_region,
+empresa.industry,
+empresa.industry_reclassified,
+empresa.industry_reclassified_2,
+empresa.market_cap,
+empresa.market_cap_ajustado,
+empresa.total_revenue,
+empresa.total_revenue_ajustado,
+empresa.employees
+"
+
+result_query_1 <- run_query("bolt://localhost:7687", user_neo4j, password_neo4j, query_1)
+data_1 <- convert_df(result_query_1, field_names = names(result_query_1[[1]]))
+columnas_numericas_1 <- c("r.outstanding", "r.value", "r.value_ajustado", "empresa.market_cap", "empresa.market_cap_ajustado", "empresa.total_revenue", "empresa.total_revenue_ajustado")
+data_1 <- data_1 %>% mutate(across(all_of(columnas_numericas_1), as.numeric))
+result_query_2 <- run_query("bolt://localhost:7687", user_neo4j, password_neo4j, query_2)
+data_2 <- convert_df(result_query_2, field_names = names(result_query_2[[1]]))
+columnas_numericas_2 <- c("empresa.market_cap", "empresa.market_cap_ajustado", "empresa.total_revenue", "empresa.total_revenue_ajustado", "empresa.employees")
+data_2 <- data_2 %>% mutate(across(all_of(columnas_numericas_2), as.numeric))
+
+tabla_info_accionistas <- read_excel("./tablas_input/auxiliares/tabla_info_accionistas.xlsx") %>% 
+                            select(investor_name, ownership_structure, ownership_specific, ownership_family, ownership_multifamily,
+                                   principal_activity, finance, country, region
+                                   )
+```
+
+Primero me ocupo de la tabla de las 316 empresas.
+
+```{r}
+query_2_aux <- "
+match path=(empresa{entidad_principal:'si'})<-[r:filial*1..]-(filial)
+with empresa, collect(distinct filial) as filiales
+unwind filiales as filial
+return empresa.name,
+count(filial) as total_filiales,
+count(CASE WHEN filial.type = 'Public' THEN 1 END) AS total_filiales_public,
+count(CASE WHEN filial.type = 'Private' THEN 1 END) AS total_filiales_private,
+count(CASE WHEN filial.country_region = empresa.country_region THEN 1 END) AS filiales_mismo_pais,
+count(CASE WHEN filial.country_region <> empresa.country_region THEN 1 END) AS filiales_distinto_pais,
+count(CASE WHEN filial.country_region IN ['Argentina', 'Peru', 'Panama', 'Costa Rica', 'Paraguay', 'Uruguay', 'Colombia', 'Chile', 'Brazil', 'Bolivia', 'Mexico', 'Puerto Rico'] THEN 1 END) AS filiales_america_latina,
+count(CASE WHEN filial.industry_reclassified = 'Mining' THEN 1 END) AS filiales_mining,
+count(CASE WHEN filial.industry_reclassified = 'Traditional Energy (Non-renewable Energy)' THEN 1 END) AS filiales_traditional_energy,
+count(CASE WHEN filial.industry_reclassified = 'Renewable Energy' THEN 1 END) AS filiales_renewable_energy,
+count(CASE WHEN filial.industry_reclassified = 'Fishing & Farming' THEN 1 END) AS filiales_fishing_farming,
+count(CASE WHEN filial.industry_reclassified = 'Forestry' THEN 1 END) AS filiales_forestry,
+count(CASE WHEN filial.industry_reclassified = 'Food' THEN 1 END) AS filiales_food,
+count(CASE WHEN filial.industry_reclassified = 'Beverages' THEN 1 END) AS filiales_beverages,
+count(CASE WHEN filial.industry_reclassified = 'Manufacturing' THEN 1 END) AS filiales_manufacturing,
+count(CASE WHEN filial.industry_reclassified = 'Biotechnology' THEN 1 END) AS filiales_biotechnology,
+count(CASE WHEN filial.industry_reclassified = 'Electronics' THEN 1 END) AS filiales_electronics,
+count(CASE WHEN filial.industry_reclassified = 'Machinery Manufacturing' THEN 1 END) AS filiales_machinery_manufacturing,
+count(CASE WHEN filial.industry_reclassified = 'Chemicals' THEN 1 END) AS filiales_chemicals,
+count(CASE WHEN filial.industry_reclassified = 'Utilities' THEN 1 END) AS filiales_utilities,
+count(CASE WHEN filial.industry_reclassified = 'Investment Companies' THEN 1 END) AS filiales_investment_companies,
+count(CASE WHEN filial.industry_reclassified = 'Banking' THEN 1 END) AS filiales_banking,
+count(CASE WHEN filial.industry_reclassified = 'Corporate Financial Service Industry' THEN 1 END) AS filiales_corporate_financial_service,
+count(CASE WHEN filial.industry_reclassified = 'Trusts and Funds' THEN 1 END) AS filiales_corporate_trust_funds,
+count(CASE WHEN filial.industry_reclassified = 'Insurance' THEN 1 END) AS filiales_insurance,
+count(CASE WHEN filial.industry_reclassified = 'Construction' THEN 1 END) AS filiales_construction,
+count(CASE WHEN filial.industry_reclassified = 'Real Estate' THEN 1 END) AS filiales_real_state,
+count(CASE WHEN filial.industry_reclassified = 'Retail and Commerce' THEN 1 END) AS filiales_retail_commerce,
+count(CASE WHEN filial.industry_reclassified = 'Transport and Logistics' THEN 1 END) AS filiales_transport_logistics,
+count(CASE WHEN filial.industry_reclassified = 'Business Support' THEN 1 END) AS filiales_business_support,
+count(CASE WHEN filial.industry_reclassified = 'Media' THEN 1 END) AS filiales_media,
+count(CASE WHEN filial.industry_reclassified = 'Telecommunication' THEN 1 END) AS filiales_telecommunication,
+count(CASE WHEN filial.industry_reclassified = 'Leisure' THEN 1 END) AS filiales_leisure,
+count(CASE WHEN filial.industry_reclassified = 'Healthcare' THEN 1 END) AS filiales_healthcare,
+count(CASE WHEN filial.industry_reclassified = 'Others' THEN 1 END) AS filiales_others
+"
+
+result_query_2_aux <- run_query("bolt://localhost:7687", user_neo4j, password_neo4j, query_2_aux)
+data_2_aux <- convert_df(result_query_2_aux, field_names = names(result_query_2_aux[[1]]))
+
+data_4 <- data_1 %>% group_by(empresa.name) %>% 
+  mutate(r.value_per = round(100*as.numeric(r.value)/sum(as.numeric(r.value), na.rm = TRUE),2)) %>%
+  arrange(desc(r.value_per)) %>%
+  slice_head() %>%
+  ungroup()
+
+data_4 <- data_4 %>% mutate(r.value_per = ifelse(r.value_per == "NaN", 0, r.value_per))
+
+data_final <- left_join(data_4, data_2_aux, by="empresa.name")
+
+columnas_num <- c("r.value", "r.value_per", names(result_query_2_aux[[1]]))
+columnas_num <- columnas_num[-3]
+
+data_final <- data_final %>% mutate(across(all_of(columnas_num), \(x) as.numeric(x)))
+
+data_final <- data_final %>% mutate(across(all_of(columnas_num), \(x) ifelse(is.na(x), 0, x)))
+
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_0.csv", row.names = FALSE)
+      
+
+```
+
+Tabla 1: En las filas, los sectores económicos de la reclasificación (columna E de la tabla: empresa.industry). En las columnas: (i) number of companies per sector (en total han de ser 300), (ii) cuántas de ellas son de familias (ver archivo adjunto donde hay esa columna) (iii) market capitalization (unificado a dólares de 1990, elegir el año 2023 que es el más completo, y donde no esté el dato, poner el de 2022), (iv) revenues per sector (igual que el anterior), (iv) employees per sector (no poner el de usd 1990 porque acá son personas, poner el tabla_variables_employees_currency_nacional). Cada una de estas columnas sería ideal si tienen un gráfico por sectores (o de quesitos) que muestre las proporciones por sector.
+
+Petición Febrero 2026
+
+Queremos también trabajarla con estos sectores, por si puedes totalizarla, sería la Tabla 1b que te adjunto, en la columna J. Sería hacer la misma tabla 1, pero con esa columna J de sectores reformulada. Son unos sectores nuevos que solo usamos en esta tabla.
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>% 
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup()
+
+data_4 <- data_2 %>% count(empresa.industry_reclassified, empresa.grupo_familiar) %>%
+            pivot_wider(names_from = "empresa.grupo_familiar", values_from = "n", values_fill = 0,
+                        names_glue = "grupo_familiar_{empresa.grupo_familiar}"
+                        )
+
+data_5 <- data_2 %>% count(empresa.industry_reclassified)
+
+data_6 <- data_2 %>% group_by(empresa.industry_reclassified) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE))
+
+data_7 <- data_2 %>% group_by(empresa.industry_reclassified) %>%
+            summarise(sum_total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE))
+
+data_8 <- data_2 %>% group_by(empresa.industry_reclassified) %>%
+            summarise(total_employees = sum(empresa.employees, na.rm = TRUE))
+
+data_9 <- data_2 %>% count(empresa.industry_reclassified, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "empresas_{empresa.country_region}"
+                        )
+
+data_10 <- data_2 %>% count(empresa.industry_reclassified_2)
+
+data_11 <- data_2 %>% count(empresa.industry_reclassified_2, empresa.grupo_familiar) %>%
+            pivot_wider(names_from = "empresa.grupo_familiar", values_from = "n", values_fill = 0,
+                        names_glue = "grupo_familiar_{empresa.grupo_familiar}"
+                        )
+
+data_12 <- data_2 %>% group_by(empresa.industry_reclassified_2) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE))
+
+data_13 <- data_2 %>% group_by(empresa.industry_reclassified_2) %>%
+            summarise(sum_total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE))
+
+data_14 <- data_2 %>% group_by(empresa.industry_reclassified_2) %>%
+            summarise(total_employees = sum(empresa.employees, na.rm = TRUE))
+
+data_15 <- data_2 %>% count(empresa.industry_reclassified_2, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "empresas_{empresa.country_region}"
+            )
+
+data_final <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified") %>%
+                          full_join(data_6, by="empresa.industry_reclassified") %>%
+                          full_join(data_7, by="empresa.industry_reclassified") %>%
+                          full_join(data_8, by="empresa.industry_reclassified") %>%
+                          full_join(data_9, by="empresa.industry_reclassified")
+  
+data_final_b <- data_10 %>% full_join(data_11, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_12, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_13, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_14, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_15, by="empresa.industry_reclassified_2")
+
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_1.csv", row.names = FALSE)
+write.csv(data_final_b, file="./export/tablas/peticiones_febrero_2026/tabla_1b.csv", row.names = FALSE)
+```
+
+Tabla 2: En las filas, los países de las 300 empresas (columna B de la tabla: empresa.country_region). En las columnas: (i) number of companies per sector (en total han de ser 300), (ii) cantidad de ellas que son familiares, (iii) market capitalization per country, (iv) revenues per country and (v) employees totales y desagregados por sector (cada columna, la cantidad de empleados de cada sector por país).
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>% 
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup()
+
+data_4 <- data_2 %>% group_by(empresa.country_region) %>%
+            summarise(total_country_region = n(),
+                      total_market_cap = sum(empresa.market_cap, na.rm = TRUE),
+                      total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE),
+                      sum_total_revenue = sum(empresa.total_revenue, na.rm = TRUE),
+                      sum_total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE)
+                      )
+
+data_5 <- data_2 %>% count(empresa.country_region, empresa.grupo_familiar) %>%
+              pivot_wider(names_from = "empresa.grupo_familiar", values_from = "n", values_fill = 0, 
+                          names_glue = "grupo_familiar_{empresa.grupo_familiar}"
+                          )
+
+data_6 <- data_2 %>% count(empresa.country_region, empresa.industry) %>%
+              pivot_wider(names_from = "empresa.industry", values_from = "n", values_fill = 0, 
+                          names_glue = "industry_{empresa.industry}"
+                          )
+
+data_7 <- data_2 %>% count(empresa.country_region, empresa.industry_reclassified) %>%
+              pivot_wider(names_from = "empresa.industry_reclassified", values_from = "n", values_fill = 0, 
+                          names_glue = "industry_reclassified_{empresa.industry_reclassified}"
+                          )
+
+data_final <- data_4 %>% full_join(data_5, by="empresa.country_region") %>%
+                          full_join(data_6, by="empresa.country_region") %>%
+                          full_join(data_7, by="empresa.country_region")
+
+
+write.csv(data_1, file="./export/tablas/peticiones_febrero_2026/tabla_2.csv", row.names = FALSE)
+```
+
+Tabla 3. Solo 2 filas: empresas familiares y empresas no familiares. Y en las columnas, el despliegue de países en las que están cada uno, así como columnas de los sectores en los que se encuentran. Cada columna (país y sector) con una columna al lado de empresa.market.cap (columna H)
+
+Petición febrero 2026
+
+Es la tabla que tú habías nombrado como 4 pero que en realidad es la 3. Está bien la división en 2 filas de la data, pero queremos saber el resto de Cada columna (país y sector) con una columna al lado de empresa.market.cap (columna H), lo queremos como la tabla 2.
+Todo esto significa que quieren cuantificar paises y sectores de cada fila.
+
+```{r}
+data_4 <- data_2 %>% group_by(empresa.grupo_familiar) %>% 
+            summarise(total = n(),
+                      total_market_cap = sum(as.numeric(empresa.market_cap), na.rm = TRUE),
+                      total_market_cap_ajustado = sum(as.numeric(empresa.market_cap_ajustado), na.rm = TRUE),
+                      sum_total_revenue = sum(as.numeric(empresa.total_revenue), na.rm = TRUE),
+                      sum_total_revenue_ajustado = sum(as.numeric(empresa.total_revenue_ajustado), na.rm = TRUE),
+                      empresa.country_region = paste(empresa.country_region, collapse = ", "),
+                      empresa.industry_reclassified = paste(empresa.industry_reclassified, collapse = ", ")
+                      )
+
+data_5 <- data_2 %>% count(empresa.grupo_familiar, empresa.country_region) %>% 
+            pivot_wider(names_from = "empresa.country_region", 
+                        values_from = "n", values_fill = 0,
+                        names_glue = "country_{empresa.country_region}"
+                        )
+
+data_6 <- data_2 %>% count(empresa.grupo_familiar, empresa.industry_reclassified) %>% 
+            pivot_wider(names_from = "empresa.industry_reclassified",
+                        values_from = "n", values_fill = 0,
+                        names_glue = "industry_{empresa.industry_reclassified}"
+                        ) 
+
+data_final <- data_4 %>%  full_join(data_5, by="empresa.grupo_familiar") %>% 
+                          full_join(data_6, by="empresa.grupo_familiar")
+
+
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_3.csv", row.names = FALSE)
+
+```
+
+Tabla 4: Agrupando la table de 300 en tres grupos de 100/100/100 según el porcentaje de propiedad del primer shareholder (primer grupo con las 100 empresas con mayores porcentajes, segundo grupo con las 100 empresas de porcentajes intermedios y tercer grupo con los 100 que tienen menor porcentaje de su primer shareholder), sacar para esas 3 filas: (i) Columnas con el porcentaje del país de origen de las empresas (1 columna por país), (ii) Columnas con el país de origen del primer inversionista, (iii) Columnas con los totales sumados de las 100 empresas de market capitalization, revenues and employees (las dos primeras armonizadas a usd y la última no).
+
+Petición febrero 2026
+
+Agrupando la tabla de 300 en tres filas según tres grupos de 100/100/100 según el porcentaje de propiedad del primer shareholder (primer grupo con las 100 empresas con mayores porcentajes, segundo grupo con las 100 empresas de porcentajes intermedios y tercer grupo con los 100 que tienen menor porcentaje de su primer shareholder). También es pregunta en Red, porque tiene info que relacionar con la tabla de 500 que te adjunto (Tabla_4-n). Sacar para esas 3 filas: (i) Columnas con el porcentaje del país de origen de las empresas (1 columna por país), (ii) Columnas con el país de origen del primer inversionista, (iii) Columnas con los totales sumados de las 100 empresas de market capitalization, revenues and employees (las dos primeras armonizadas a usd y la última no). (iv) informaciones por columnas de la cantidad por ownership, activity y finance, tomando en cuenta las columnas K, O y P (respectivamente) de la tabla adjunta 4-n, también por país (columna I) y region (J).
+
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>% 
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  mutate(tercil = ntile(r.outstanding, 3)) %>%
+  select(tercil, empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value) %>%
+  filter(!is.na(tercil))
+
+data_4 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(total_empresas = n()) %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_5 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(total_accionistas = n()) %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_6 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  count(tercil, empresa.country_region) %>%
+  pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+              names_glue = "empresa_{empresa.country_region}") %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_7 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  count(tercil, accionista.country_region) %>%
+  pivot_wider(names_from = "accionista.country_region", values_from = "n",
+              values_fill = 0, names_glue = "accionista_{accionista.country_region}") %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_8 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(market_cap = sum(empresa.market_cap, na.rm = TRUE), 
+                                 market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE),
+                                 total_revenue = sum(empresa.total_revenue, na.rm = TRUE),
+                                 total_revenue_ajustado=sum(empresa.total_revenue_ajustado, na.rm = TRUE),
+                                 employees = sum(empresa.employees, na.rm = TRUE), .groups = "drop"
+                                 )
+
+data_9 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+            group_by(tercil, accionista.country_region) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "total_market_cap_ajustado", values_fill = 0,
+                        names_glue = "total_market_cap_ajustado_{accionista.country_region}")
+
+data_10 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+            group_by(tercil, accionista.country_region) %>%
+            summarise(sum_total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "sum_total_revenue_ajustado", values_fill = 0,
+                        names_glue = "sum_total_revenue_ajustado_{accionista.country_region}")
+
+data_10 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accionista.name), by="empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(tercil, ownership_structure) %>%
+            pivot_wider(names_from = "ownership_structure", values_from = "n", values_fill = 0,
+                        names_glue = "ownership_structure_{ownership_structure}")
+
+data_final <- data_4 %>% full_join(data_5, by="tercil") %>%
+                          full_join(data_6, by="tercil") %>%
+                          full_join(data_7, by="tercil") %>%
+                          full_join(data_8, by="tercil") %>%
+                          full_join(data_9, by="tercil") %>%
+                          full_join(data_10, by="tercil")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_4.csv", row.names = FALSE)
+write.csv(data_3, file="./export/tablas/peticiones_febrero_2026/tabla_4b.csv", row.names = FALSE)
+
+```
+
+Tabla 5: Esta no nos faltaban datos de nuestra parte, pero pensamos que sí. Te la pedimos ya formalmente.
+
+Es un trabajo similar a la tabla 4, pero acá las tres filas de agrupación de 100 empresas en cada una es según el tamaño de la empresa según marketcap armonizado. Ahí agregaríamos (i) Columnas con las cantidades que son en las empresas que son familiares y las que no, (ii) el porcentaje del país de origen de las empresas (1 columna por país), (iii) Columnas según el país de origen del primer inversionista, (iv) Columnas con los totales sumados de las 100 empresas de market capitalization, revenues and employees (las dos primeras armonizadas a usd y la última no). Al igual que a la otra, agregaríamos columnas según cada tipo de principal inversionista con columnas de la cantidad por ownership, activity y finance, tomando en cuenta las columnas K, O, P (respectivamente) de la tabla adjunta 4-n de 500. También por país (columna I) y region (J).
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>% 
+  arrange(desc(empresa.market_cap_ajustado)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  mutate(tercil = ntile(empresa.market_cap_ajustado, 3)) %>%
+  select(tercil, empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value) %>%
+  filter(!is.na(tercil))
+
+data_4 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(total_empresas = n()) %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_5 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(total_accionistas = n()) %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_6 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  count(tercil, empresa.country_region) %>%
+  pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0, names_glue = "empresa_{empresa.country_region}") %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_7 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  count(tercil, accionista.country_region) %>%
+  pivot_wider(names_from = "accionista.country_region", values_from = "n", values_fill = 0, names_glue = "accionista_{accionista.country_region}") %>%
+  mutate(across(-all_of("tercil"), \(x) round(100 * x/sum(x, na.rm = TRUE),2), .names = paste0("{col}","_per")))
+
+data_8 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+  group_by(tercil) %>% summarise(market_cap = sum(empresa.market_cap, na.rm = TRUE), 
+                                 market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE),
+                                 total_revenue = sum(empresa.total_revenue, na.rm = TRUE),
+                                 total_revenue_ajustado=sum(empresa.total_revenue_ajustado, na.rm = TRUE),
+                                 employees = sum(empresa.employees, na.rm = TRUE), .groups = "drop"
+                                 )
+
+data_9 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+            group_by(tercil, accionista.country_region) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "total_market_cap_ajustado", values_fill = 0,
+                        names_glue = "total_market_cap_ajustado_{accionista.country_region}")
+
+data_10 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
+            group_by(tercil, accionista.country_region) %>%
+            summarise(sum_total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "sum_total_revenue_ajustado", values_fill = 0,
+                        names_glue = "sum_total_revenue_ajustado_{accionista.country_region}")
+
+data_10 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accionista.name), by="empresa.name") %>% left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(tercil, ownership_structure) %>%
+            pivot_wider(names_from = "ownership_structure", values_from = "n", values_fill = 0,
+                        names_glue = "ownership_structure_{ownership_structure}")
+
+data_final <- data_4 %>% full_join(data_5, by="tercil") %>%
+                          full_join(data_6, by="tercil") %>%
+                          full_join(data_7, by="tercil") %>%
+                          full_join(data_8, by="tercil") %>%
+                          full_join(data_9, by="tercil") %>%
+                          full_join(data_10, by="tercil")
+                          
+
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_5.csv", row.names = FALSE)
+
+```
+
+Tabla 6: Nueva tabla con las mismas filas de 1b y nuevas columnas.
+
+En este caso, es agarrar la Tabla 1b que te pedimos con los nuevos sectores de las 300 empresas, y añadirle las columnas asociadas a los 500 inversionistas. Es una tabla con esos sectores. Se puede fusionar con la tabla 1b en realidad. Y de esa misma tabla 4-n usaríamos todas las columnas en amarillo desde la I a la P que nos permite caracterizar por bloques el principal accionista en un ejercicio por sectores económicos redefinidos por Michael Janoschka. Fusionaría los pasos 1b y 6 esta megatabla por sectores simplificados en las filas en los que se caracterizan por columnas según lo que tenemos en la tabla de 500 de los principales inversionistas.
+
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            count(empresa.industry_reclassified_2, accionista.country_region) %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "n", values_fill = 0,
+                              names_glue = "accionista_{accionista.country_region}")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            group_by(empresa.industry_reclassified_2, accionista.country_region) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "total_market_cap_ajustado", values_fill = 0,
+                              names_glue = "total_market_cap_ajustado_{accionista.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(empresa.industry_reclassified_2, ownership_specific) %>%
+            pivot_wider(names_from = "ownership_specific", values_from = "n", values_fill = 0,
+                              names_glue = "ownership_specific_{ownership_specific}")
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            group_by(empresa.industry_reclassified_2, ownership_specific) %>%
+            summarise(total_market_cap = sum(empresa.market_cap, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "ownership_specific", values_from = "total_market_cap", values_fill = 0,
+                              names_glue = "total_market_cap_{ownership_specific}")
+
+data_final <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_6, by="empresa.industry_reclassified_2") %>%
+                          full_join(data_7, by="empresa.industry_reclassified_2")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_6.csv", row.names = FALSE)
+
+```
+
+Tabla 7: Similar a la 2 pero con más columnas de los 500 inversionistas.
+
+En este caso serían las mismas columnas de la Tabla 2, porque es de la lista de países de las 300, y es combinar con la información del primer shareholder, por lo que hay que acudir a la de 500. Y de esa misma tabla 4-n usaríamos todas las columnas en amarillo desde la I a la P.
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            count(empresa.country_region, accionista.country_region) %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "n", values_fill = 0,
+                              names_glue = "accionista_{accionista.country_region}")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            group_by(empresa.country_region, accionista.country_region) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "accionista.country_region", values_from = "total_market_cap_ajustado", values_fill = 0,
+                              names_glue = "total_market_cap_ajustado_{accionista.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(empresa.country_region, ownership_specific) %>%
+            pivot_wider(names_from = "ownership_specific", values_from = "n", values_fill = 0,
+                              names_glue = "ownership_specific_{ownership_specific}")
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            group_by(empresa.country_region, ownership_specific) %>%
+            summarise(total_market_cap = sum(empresa.market_cap, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "ownership_specific", values_from = "total_market_cap", values_fill = 0,
+                              names_glue = "total_market_cap_{ownership_specific}")
+
+data_final <- data_4 %>%  full_join(data_5, by="empresa.country_region") %>%
+                          full_join(data_6, by="empresa.country_region") %>%
+                          full_join(data_7, by="empresa.country_region")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_7.csv", row.names = FALSE)
+
+```
+Tabla 8: Tabla de fusion 300 y 500.
+
+En esta tabla las filas son las categorías de la columna L (tipo de control) de la tabla adjunta Tabla_4-n de 500, y según esas categorías de primer propietario, se ponen los datos sumatorios de las 300 empresas en las columnas. Agregar países, subsidiarias, datos financieros.
+
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE),
+                      total_revenue_ajustado = sum(empresa.total_revenue_ajustado, na.rm = TRUE),
+                      total_employees = sum(empresa.employees, na.rm = TRUE)
+                      )
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(ownership_specific, country) %>%
+            pivot_wider(names_from = "country", values_from = "n", values_fill = 0,
+                              names_glue = "accionista_{country}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific, country) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "country", values_from = "total_market_cap_ajustado", values_fill = 0,
+                              names_glue = "accionista_pais_total_market_cap_ajustado_{country}")
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
+            count(ownership_specific, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                              names_glue = "principal_activity_{principal_activity}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific, principal_activity) %>%
+            summarise(total_market_cap_ajustado = sum(empresa.market_cap_ajustado, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_market_cap_ajustado", values_fill = 0,
+                              names_glue = "principal_activity_total_market_cap_ajustado_{principal_activity}")
+
+data_final <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
+                          full_join(data_6, by="ownership_specific") %>%
+                          full_join(data_7, by="ownership_specific") %>%
+                          full_join(data_8, by="ownership_specific")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_8.csv", row.names = FALSE)
+
+```
+
+
+Tabla 9: Esta se pidió, estaba la info completa, pero tal vez se te pasó.
+
+Es una tabla de origen y destino de la inversión. En las filas, las regiones de los 500 inversores (columna M de la tabla 4-n), y en las columnas su conteo de cuántos por país (J), en cuántos países son inversor cada uno (columnas mayor a cero en las columnas D, E y F de México, Chile y Brasil). Además, en las columnas, de inversión (columna C) y actividad principal (columna O).
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(region) %>%
+            summarise(total = n(), total_value = sum(r.value, na.rm = TRUE))
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(region, country) %>%
+            pivot_wider(names_from = "country", values_from = "n", values_fill = 0,
+                        names_glue = "count_{country}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(region, country) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "country", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{country}")
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(region, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                        names_glue = "count_{principal_activity}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(region, principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{principal_activity}")
+
+data_final <- data_4 %>% full_join(data_5, by="region") %>%
+                          full_join(data_6, by="region") %>%
+                          full_join(data_7, by="region") %>%
+                          full_join(data_8, by="region")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_9.csv", row.names = FALSE)
+
+```
+
+Tabla 10: Nueva tabla de Ownership structure.
+
+Esta tabla se centra en hacer un análisis de los 500 inversores sin relacionar con la de 300, es una tabla que categoriza según la columna N del tipo de propiedad en las filas de la tabla que pedimos, donde en las columnas puedan los datos del número de inversores en cada categoría, el valor de la inversión de cada categoría en la columna D (recuerda que esta tabla ya está en dólares), y también el número en cada estar categorizadas la columna I y J de country y región de control, con conteo de las principales actividades de cada tipología (columna O)
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_structure) %>%
+            summarise(total = n(), total_value = sum(r.value, na.rm = TRUE), .groups = "drop")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_structure, country) %>%
+            pivot_wider(names_from = "country", values_from = "n", values_fill = 0,
+                        names_glue = "count_{country}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_structure, country) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "country", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{country}")
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_structure, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                        names_glue = "count_{principal_activity}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_structure, principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{principal_activity}")
+
+data_final <- data_4 %>% full_join(data_5, by="ownership_structure") %>%
+                          full_join(data_6, by="ownership_structure") %>%
+                          full_join(data_7, by="ownership_structure") %>%
+                          full_join(data_8, by="ownership_structure")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_10.csv", row.names = FALSE)
+
+```
+
+Tabla 11: Nueva table de Ownership control.
+
+Es una tabla similar a la anterior, donde las filas son las categorías de la columna K, y las columnas son las mismas de la anterior.
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific, empresa.country_region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{empresa.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_specific)
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_specific, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "total_{empresa.country_region}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific, region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{region}")
+
+data_9 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_specific, region) %>%
+            pivot_wider(names_from = "region", values_from = "n", values_fill = 0,
+                        names_glue = "total_{region}")
+
+data_10 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_specific, principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{principal_activity}")
+
+data_11 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_specific, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                        names_glue = "total_{principal_activity}")
+
+data_final <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
+                          full_join(data_6, by="ownership_specific") %>%
+                          full_join(data_7, by="ownership_specific") %>%
+                          full_join(data_8, by="ownership_specific") %>%
+                          full_join(data_9, by="ownership_specific") %>%
+                          full_join(data_10, by="ownership_specific") %>%
+                          full_join(data_11, by="ownership_specific")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_11.csv", row.names = FALSE)
+```
+
+Tabla 12: Nueva tabla según Principal Activity.
+
+Es una tabla similar a las anteriores, donde las filas son las categorías de la columna O, y las columnas son las mismas de la anterior, menos la última precisamente.
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(principal_activity, empresa.country_region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{empresa.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(principal_activity)
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(principal_activity, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "count_{empresa.country_region}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(principal_activity, region) %>%
+            pivot_wider(names_from = "region", values_from = "n", values_fill = 0,
+                        names_glue = "count_{region}")
+
+data_9 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(principal_activity, region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{region}")
+
+data_final <- data_4 %>%  full_join(data_5, by="principal_activity") %>%
+                          full_join(data_6, by="principal_activity") %>%
+                          full_join(data_7, by="principal_activity") %>%
+                          full_join(data_8, by="principal_activity") %>%
+                          full_join(data_9, by="principal_activity") 
+                          
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_12.csv", row.names = FALSE)
+```
+
+Tabla 13: Nueva tabla segun Finance.
+
+Es una tabla similar a la anterior, donde las filas son las categorías de la columna P, y las columnas son las mismas de la anterior.
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(finance) %>%
+            summarise(count = n(),
+                      total_value = sum(r.value, na.rm = TRUE)
+                      )
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(finance, empresa.country_region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{empresa.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(finance, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "count_{empresa.country_region}")
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(finance, region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{region}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(finance, region) %>%
+            pivot_wider(names_from = "region", values_from = "n", values_fill = 0,
+                        names_glue = "total_{region}")
+
+data_9 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(finance, principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{principal_activity}")
+
+data_10 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(finance, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                        names_glue = "total_{principal_activity}")
+
+data_final <- data_4 %>%  full_join(data_5, by="finance") %>%
+                          full_join(data_6, by="finance") %>%
+                          full_join(data_7, by="finance") %>%
+                          full_join(data_8, by="finance") %>%
+                          full_join(data_9, by="finance") %>%
+                          full_join(data_10, by="finance")
+                          
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_13.csv", row.names = FALSE)
+```
+
+
+
+Tabla 14: Nueva tabla según Familias.
+
+Es una tabla similar a la anteriores, donde las filas son las categorías de la columna M de las familias específicas (agrupar todas donde no son familia), y las columnas son las mismas de las anteriores.
+
+
+```{r}
+data_3 <- data_1 %>% group_by(empresa.name) %>%
+  arrange(desc(r.outstanding)) %>%
+  slice_head() %>%
+  ungroup() %>%
+  filter(!is.na(r.outstanding)) %>%
+  select(empresa.name, accionista.name, accionista.country_region, r.outstanding, r.value)
+
+data_4 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_family) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop")
+
+data_5 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_family, empresa.country_region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{empresa.country_region}")
+
+data_6 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_family)
+
+data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_family, empresa.country_region) %>%
+            pivot_wider(names_from = "empresa.country_region", values_from = "n", values_fill = 0,
+                        names_glue = "total_{empresa.country_region}")
+
+data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_family, region) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "region", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{region}")
+
+data_9 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_family, region) %>%
+            pivot_wider(names_from = "region", values_from = "n", values_fill = 0,
+                        names_glue = "total_{region}")
+
+data_10 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            group_by(ownership_family, principal_activity) %>%
+            summarise(total_value = sum(r.value, na.rm = TRUE), .groups = "drop") %>%
+            pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
+                        names_glue = "total_value_{principal_activity}")
+
+data_11 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>% 
+            left_join(tabla_info_accionistas, by = c("accionista.name"="investor_name")) %>%
+            count(ownership_family, principal_activity) %>%
+            pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
+                        names_glue = "total_{principal_activity}")
+
+data_final <- data_4 %>%  full_join(data_5, by="ownership_family") %>%
+                          full_join(data_6, by="ownership_family") %>%
+                          full_join(data_7, by="ownership_family") %>%
+                          full_join(data_8, by="ownership_family") %>%
+                          full_join(data_9, by="ownership_family") %>%
+                          full_join(data_10, by="ownership_family") %>%
+                          full_join(data_11, by="ownership_family")
+                          
+write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_14.csv", row.names = FALSE)
+
+```
+
+
+
+
+

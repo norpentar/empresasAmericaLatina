@@ -1,0 +1,1985 @@
+---
+title: "Consultas Shareholders"
+author: "Iñigo Arrazola"
+date: "2025-05-07"
+output:
+  html_document:
+    css: estilos.css
+  pdf_document: default
+---
+
+```{r setup, include=FALSE, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+
+```
+
+
+```{r echo=FALSE, include=FALSE}
+library(tidyverse)
+library(R6)
+library(dplyr)
+library(readxl)
+library(lubridate)
+library(purrr)
+library(grid)
+library(gridExtra)
+library(kableExtra)
+library(patchwork)
+library(ggplot2)
+library(cowplot)
+library(ggpubr)
+library(scales)
+library(ggforce)
+
+source("./clases_objetos.R")
+source("./accionistas.R")
+source("./run.R")
+lista_empresas_brasil <- lista_empresas_principales$extraeEntidadesPais("brazil")
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("chile")
+lista_empresas_vanguard <- lista_empresas_principales$extraeEntidadesNombreAccionistas("vanguard")
+```
+
+# Producto 1. Análisis de shareholders de las empresas.
+
+## 0. Vistazo general.
+
+### 0.1 En el listado total, listar todos los inversores ordenados por cantidad sumada neta en la primera columna, la cantidad total en la segunda columna, la cantidad que suman para empresas de México en la tercera, la cantidad igual de Brasil en la cuarta, la cantidad igual de Chile, Investor Sub-Type de la tabla de Shareholders en la sexta columna y el país del inversor en la séptima columna.
+
+```{r}
+
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+tabla_2 <- tabla_1 %>% group_by(investor_name) %>%
+            summarise(valor_total = sum(value, na.rm = TRUE),
+                      valor_mexico = sum(value[empresa_principal_pais == "Mexico"], na.rm = TRUE),
+                      valor_brasil = sum(value[empresa_principal_pais == "Brazil"], na.rm = TRUE),
+                      valor_chile = sum(value[empresa_principal_pais == "Chile"], na.rm = TRUE),
+                      valor_otros = sum(value[!empresa_principal_pais %in% c("Mexico", "Brazil", "Chile")], na.rm = TRUE),
+                      investor_subtype = unique(paste(investor_subtype)),
+                      country = unique(paste(country_region))
+                      )
+
+tabla_2 <- tabla_2 %>% arrange(desc(valor_total))
+
+tabla_2_numbers <- tabla_2 %>% mutate(valor_total = number(valor_total,  accuracy = 0.01, big.mark = ","),
+                                      valor_mexico = number(valor_mexico,  accuracy = 0.01, big.mark = ","),
+                                      valor_brasil = number(valor_brasil,  accuracy = 0.01, big.mark = ","),
+                                      valor_chile = number(valor_chile,  accuracy = 0.01, big.mark = ","),
+                                      valor_otros = number(valor_otros,  accuracy = 0.01, big.mark = ",")
+                                      )
+cat("<h3> Inversionistas ordenados por valores invertidos  por inversión de fondos de pensiones chilenos en términos netos</h3>\n")
+tabla_2_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+### 0.2 Tabla con mirada desde los Shareholders seleccionados.
+Los shareholders son:
+
+  1. BlackRock: "BlackRock Institutional Trust Company, N.A.", "BlackRock Advisors (UK) Limited", "BlackRock Investment Management (UK) Ltd.", "BlackRock Asset Management Deutschland AG", "BlackRock Asset Management Deutschland AG", "BlackRock Brasil Gestora de Investimentos Ltda.", "BlackRock Mexico Operadora SA de CV SOFI", "BlackRock Asset Management North Asia Limited", "BlackRock Asset Management North Asia Limited", "BlackRock Asset Management Ireland Limited", "BlackRock Financial Management, Inc.", "BlackRock (Netherlands) B.V.", "BlackRock Japan Co., Ltd.", "BlackRock Investment Management, LLC", "BlackRock Advisors, LLC", "BlackRock Asset Management Canada Limited", "BlackRock Investment Management (Australia) Ltd.", "BlackRock (Luxembourg) S.A.", "BlackRock Fund Advisors", "BlackRock (Singapore) Limited", "BlackRock International Ltd." 
+  2. Santander: "Santander Rio Asset Management G.F.C.I.S.A.", "Banco Santander SA", "Grupo Empresarial Santander, S.L.", "Santander Asset Management S.A. Administradora General de Fondos", "Santander Brasil Asset Management DTVM S.A.", "Gestión Santander Mexico S.A. de C.V.", "Banco Santander Brasil SA", "Santander Asset Management", "Santander Asset Management UK Limited", "Santander Securities Services Brasil DTVM S.A", "Banco Santander International SA", "Santander Private Banking Gestion, S.A., S.G.I.I.C."
+  3. The Vanguard: "The Vanguard Group, Inc."
+  4. Capital Research Global: "Capital Research Global Investors"
+  5. Baillie Gifford: "Baillie Gifford & Co.", "Baillie Gifford Overseas Ltd."
+  6. State Street Global: "State Street Global Advisors (US)", "State Street Global Advisors (UK) Ltd.", "State Street Global Advisors Ireland Limited", "State Street Global Advisors (Japan) Co., Ltd.", "State Street Global Advisors Australia Ltd.", "State Street Global Advisors Ltd. (Canada)"
+  7. Fidelity: "Fidelity Management & Research Company LLC", "Fidelity International", "Fidelity Management & Research (Hong Kong) Limited", "Fidelity Institutional Asset Management", "Fidelity Investments Canada ULC", "Fidelity Investment Luxembourg S.A."
+  8. Norges Bank: "Norges Bank Investment Management (NBIM)"
+  9. JP Morgan Asset Management: "JP Morgan Asset Management"
+  10. Sterrebeeck B.V.: "Sterrebeeck B.V."
+  11. State Grid Corporation of China: "State Grid Corporation of China"
+  12. Invesco Advisers, Inc.: "Invesco Advisers, Inc."
+  13. T. Rowe Price Associates, Inc.: "T. Rowe Price Associates, Inc."
+  14. CPP Investment Board: "CPP Investment Board"
+  15. Morgan Stanley Investment Management Inc. (US): "Morgan Stanley Investment Management Inc. (US)"
+  16. Sequoia Capital Partners Inc.: "Sequoia Capital Partners Inc."
+  17. Mitsui & Co Ltd: "Mitsui & Co Ltd"
+  18. Dimensional Fund Advisors, L.P.: "Dimensional Fund Advisors, L.P."
+  19. Geode Capital Management, L.L.C.: "Geode Capital Management, L.L.C."
+  20. Capital International Investors: "Capital International Investors"
+
+A partir de los shareholders seleccionados, la tabla tendrá las siguientes columnas:
+        c1. Nombre del shareholder.
+        c2. Total sumado de cada inversor en las 329 empresas (neto).
+        c3. Total porcentual de cada inversor en las 329 empresas (cuánto tiene el inversor en total y qué porcentaje es del total de la inversiones totales).
+        c4. Inversión en cada uno de los países de América Latina (neto): reflejando el total de inversión en cada país de cada una de ellas.
+        c5. Inversión en cada uno de los países de América Latina (%): reflejando en términos porcentuales del total de inversión de cada una de ellas en cada país en relación al total de la inversión total que hay en cada país como sumatoria de todas las empresas.
+        c6. Número del puesto que ocupa el Shareholder entre los inversores de ese país (es igual porcentual o neto). El ranking está establecido para el país principal del inversionista (según el valor).
+        c7. Total de países diferentes desde los que actúa cada Shareholders en número (cantidad de países diferentes).
+        c8. País de la filial desde la que actúa principalmente ese Shareholder.
+        
+Utilizaremos estas tablas a lo largo del análisis (versión antigua, reemplazada por los nuevos inversores)
+
+```{r}
+ruta_matriz = "./tablas_input/auxiliares/matriz_renombre_accionistas.xlsx"
+matriz <- read_excel(ruta_matriz)
+
+nombres_empresas_seleccionadas <- matriz$nombre_modificado
+
+nombres_confusos <- c("Santander García (Mario)")
+
+tabla_accionistas <- lista_empresas_principales$entidadesAccionistasTabulado()
+tabla_accionistas$investor_name_agrupado <- tabla_accionistas$investor_name
+
+tabla_accionistas_confuso <- tabla_accionistas %>% filter(investor_name %in% nombres_confusos)
+tabla_accionistas_filtrada <- tabla_accionistas %>% filter(!investor_name %in% nombres_confusos)
+
+tabla_accionistas_filtrada_renombrada <- renombraFilasTabla(tabla_accionistas_filtrada, rep("investor_name", length(nombres_empresas_seleccionadas)), nombres_empresas_seleccionadas) 
+
+tabla_accionistas_renombrada <- tabla_accionistas_filtrada_renombrada %>% bind_rows(tabla_accionistas_confuso)
+
+tabla_accionistas_renombrada <- renombraFilasTablaVector(tabla_accionistas)
+
+```
+        
+Ahora procesamos la tabla con la mirada desde los inversores
+
+```{r}
+tabla_accionistas_renombrada_valores <- tabla_accionistas_renombrada %>%
+  group_by(investor_name) %>%
+  summarise(investor_name_agrupado = paste(unique(investor_name_agrupado), collapse = ", "),
+            country_region_agrupado = paste(unique(country_region), collapse = ", "),
+            empresa_principal_agrupado = paste(unique(empresa_principal), collapse = ", "),
+            empresa_principal_pais_agrupado = paste(unique(empresa_principal_pais), collapse = ", "),
+            empresa_principal_industria_agrupado = paste(unique(empresa_principal_industria), collapse = ", "),
+            value= sum(value, na.rm = TRUE), 
+            .groups = "drop"
+            ) %>%
+  arrange(desc(value)) %>%
+  mutate(value_per_invesores_absoluto = round(100*value/sum(value, na.rm = TRUE), 2),
+         rank_inversor_absoluto = row_number()
+         ) %>%
+  filter(investor_name %in% nombres_empresas_seleccionadas) %>%
+  arrange(desc(value)) %>%
+  mutate(value_per_inversores_relativo = round(100*value/sum(value, na.rm = TRUE),2),
+         rank_inversor_relativo = row_number()
+         )
+  
+tabla_accionistas_renombrada_pais_origen_inversiones <- tabla_accionistas_renombrada %>%
+  group_by(investor_name, country_region) %>%
+  summarise(value_pais_origen = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  rename(pais_origen_inversiones = country_region) %>%
+  group_by(pais_origen_inversiones) %>%
+  arrange(pais_origen_inversiones, desc(value_pais_origen)) %>%
+  mutate(value_pais_origen_per_total_paises = round(100*value_pais_origen/sum(value_pais_origen, na.rm = TRUE),2),
+         rank_pais_origen_total_paises = row_number()
+         ) %>%
+  ungroup() %>%
+  group_by(investor_name) %>%
+  arrange(investor_name, desc(value_pais_origen)) %>%
+  mutate(value_pais_origen_per_total_inversor = round(100*value_pais_origen/sum(value_pais_origen, na.rm = TRUE),2),
+         rank_pais_origen_total_inversor = row_number()
+         ) %>%
+  ungroup() %>%
+  filter(investor_name %in% nombres_empresas_seleccionadas)
+
+tabla_accionistas_renombrada_pais_destino_inversiones <- tabla_accionistas_renombrada %>%
+  group_by(investor_name, empresa_principal_pais) %>%
+  summarise(value_pais_destino = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  rename(pais_destino_inversiones = empresa_principal_pais) %>%
+  group_by(pais_destino_inversiones) %>%
+  arrange(pais_destino_inversiones, desc(value_pais_destino)) %>%
+  mutate(value_pais_destino_per_total_paises = round(100*value_pais_destino/sum(value_pais_destino, na.rm = TRUE),2),
+         rank_pais_destino_total_paises = row_number()
+         ) %>%
+  ungroup() %>%
+  group_by(investor_name) %>%
+  arrange(investor_name, desc(value_pais_destino)) %>%
+  mutate(value_pais_destino_per_total_inversor = round(100*value_pais_destino/sum(value_pais_destino, na.rm = TRUE),2),
+         rank_pais_destino_total_inversor = row_number()
+         ) %>%
+  ungroup() %>%
+  filter(investor_name %in% nombres_empresas_seleccionadas)
+    
+tabla_accionistas_renombrada_valores_paises <- tabla_accionistas_renombrada_valores %>%
+  full_join(tabla_accionistas_renombrada_pais_origen_inversiones, by = "investor_name") %>%
+  full_join(tabla_accionistas_renombrada_pais_destino_inversiones, by = "investor_name")
+
+
+tabla_accionistas_renombrada_valores_grafico <- tabla_accionistas_renombrada %>%
+  group_by(empresa_principal) %>%
+  mutate(value_normalizado_empresa = round(100*value/sum(value, na.rm = TRUE),2)) %>%
+  group_by(investor_name) %>%
+  mutate(value_normalizado_inversor = round(100*value/sum(value, na.rm = TRUE),2)) %>%
+  group_by(investor_name, empresa_principal) %>%
+  summarise(value_normalizado_empresa = sum(value_normalizado_empresa, na.rm = TRUE),
+            value_normalizado_inversor = sum(value_normalizado_inversor, na.rm = TRUE),
+            .groups = "drop") %>%
+  filter(investor_name %in% nombres_empresas_seleccionadas)
+
+y_max <- 60
+value_normalizado_max <- 50
+
+outliers_tabla <- tabla_accionistas_renombrada_valores_grafico %>%
+  group_by(investor_name) %>%
+  mutate(
+    q1 = quantile(value_normalizado_empresa, 0.25, na.rm = TRUE),
+    q3 = quantile(value_normalizado_empresa, 0.75, na.rm = TRUE),
+    iqr = q3 - q1,
+    #is_outlier = (outstanding_inversor < q1 - 1.5*iqr) | (outstanding_inversor > q3 + 1.5*iqr),
+    is_outlier = value_normalizado_empresa >= value_normalizado_max,
+    posicion_y = if_else(value_normalizado_empresa > value_normalizado_max, y_max - runif(n(), min=0, max=10), value_normalizado_empresa)
+  ) %>%
+  filter(is_outlier)  
+  
+n_empresas <- n_distinct(tabla_accionistas_renombrada_valores_grafico$investor_name)
+n_por_pagina <- 28
+n_paginas <-  ceiling(n_empresas / n_por_pagina)
+
+for(i in 1:n_paginas){
+  grafico <- ggplot(tabla_accionistas_renombrada_valores_grafico,
+                    aes(x="", y=value_normalizado_empresa)) + 
+    geom_violin(trim = FALSE, adjust=0.5) +
+    geom_jitter(width = 0.1, alpha = 0.3) +
+    geom_point(data = outliers_tabla, aes(y = posicion_y), color = "red", size = 2) +
+    geom_text(data = outliers_tabla, aes(y = posicion_y, 
+                                         label = paste0(empresa_principal," - ",value_normalizado_empresa,"%")
+                                         ),
+              vjust = -0.5, size = 2, color = "red") +
+    facet_wrap_paginate(~ investor_name, ncol = 4, nrow = 7, page = i, scales = "free") +
+    coord_cartesian(ylim = c(0, y_max)) +
+    labs(title = "Distribución de las inversiones de los accionistas según la empresa\n\n",
+         y = "Valor normalizado de inversión en cada empresa", x = NULL) +
+    theme(plot.title = element_text(hjust = 1.5)) + # Centrado
+    theme_minimal() +
+    theme(strip.text = element_text(face = "bold"))
+
+    ggsave(paste0("./export/graficos/shareholders/value_normalizado_inversores_empresa", i, ".pdf"), 
+           plot = grafico, width = 10, height = 15)
+    
+}
+
+archivos <- paste0("./export/graficos/shareholders/value_normalizado_inversores_empresa", 1:n_paginas,".pdf")
+cmd <- paste("pdftk", paste(archivos, collapse = " "), "cat output ./export/graficos/shareholders/grafico_inversores_empresa_unido.pdf")
+system(cmd)
+
+y_max <- 60
+value_normalizado_max <- 50
+
+outliers_tabla_2 <- tabla_accionistas_renombrada_valores_grafico %>%
+  group_by(investor_name) %>%
+  mutate(
+    q1 = quantile(value_normalizado_inversor, 0.25, na.rm = TRUE),
+    q3 = quantile(value_normalizado_inversor, 0.75, na.rm = TRUE),
+    iqr = q3 - q1,
+    #is_outlier = (outstanding_inversor < q1 - 1.5*iqr) | (outstanding_inversor > q3 + 1.5*iqr),
+    is_outlier = value_normalizado_inversor >= value_normalizado_max,
+    posicion_y = if_else(value_normalizado_inversor > value_normalizado_max, y_max - runif(n(), min=0, max=10), value_normalizado_inversor)
+  ) %>%
+  filter(is_outlier)  
+  
+n_empresas <- n_distinct(tabla_accionistas_renombrada_valores_grafico$investor_name)
+n_por_pagina <- 28
+n_paginas <-  ceiling(n_empresas / n_por_pagina)
+
+for(i in 1:n_paginas){
+  grafico <- ggplot(tabla_accionistas_renombrada_valores_grafico,
+                    aes(x="", y=value_normalizado_inversor)) + 
+    geom_violin(trim = FALSE, adjust=0.5) +
+    geom_jitter(width = 0.1, alpha = 0.3) +
+    geom_point(data = outliers_tabla_2, aes(y = posicion_y), color = "red", size = 2) +
+    geom_text(data = outliers_tabla_2, aes(y = posicion_y, 
+                                         label = paste0(empresa_principal," - ",value_normalizado_inversor,"%")
+                                         ),
+              vjust = -0.5, size = 2, color = "red") +
+    facet_wrap_paginate(~ investor_name, ncol = 4, nrow = 7, page = i, scales = "free") +
+    coord_cartesian(ylim = c(0, y_max)) +
+    labs(title = "Distribución de las inversiones de los accionistas según el total del inversor\n\n",
+         y = "Valor normalizado de inversión en respecto al total de su capital invertido", x = NULL) +
+    theme(plot.title = element_text(hjust = 1.5)) + # Centrado
+    theme_minimal() +
+    theme(strip.text = element_text(face = "bold"))
+
+    ggsave(paste0("./export/graficos/shareholders/value_normalizado_inversores_inversor", i, ".pdf"), 
+           plot = grafico, width = 10, height = 15)
+    
+}
+
+archivos <- paste0("./export/graficos/shareholders/value_normalizado_inversores_inversor", 1:n_paginas,".pdf")
+cmd <- paste("pdftk", paste(archivos, collapse = " "), "cat output ./export/graficos/shareholders/grafico_inversores_inversor_unido.pdf")
+system(cmd)
+
+tabla_accionistas_renombrada_valores_paises_wider <- tabla_accionistas_renombrada_valores_paises %>%
+  pivot_wider(names_from = c(pais_origen_inversiones), values_from = c(value_pais_origen, value_pais_origen_per_total_paises, rank_pais_origen_total_paises, value_pais_origen_per_total_inversor, rank_pais_origen_total_inversor)) %>%
+  pivot_wider(names_from = c(pais_destino_inversiones), values_from = c(value_pais_destino, value_pais_destino_per_total_paises, rank_pais_destino_total_paises, value_pais_destino_per_total_inversor, rank_pais_destino_total_inversor))
+
+cat("<h3> Mirada desde los accionistas, Paper 1</h3>\n")
+tabla_accionistas_renombrada_valores_paises %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_valores_paises, file = "./export/tablas/shareholders/tabla_mirada_accionistas_paper_1.csv")
+
+
+cat("<h3> Mirada desde los accionistas, Paper 1 Wider</h3>\n")
+tabla_accionistas_renombrada_valores_paises_wider %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_valores_paises_wider, file = "./export/tablas/shareholders/tabla_mirada_accionistas_paper_1_wider.csv")
+```
+
+        
+### 0.3 Tabla con mirada desde las empresas.
+Esta  tabla tendrá las siguientes columnas (con la info sintetizada de los inversores seleccionados):
+        c1. Nombre de la empresa
+        c2. Cada inversor de los 20, con la cantidad neta.
+        c3. Cada inversor de los 20, con la cantidad porcentual.
+        c4. Total de los inversores seleccionados de los 20, en cantidad neta (lo podemos sumar de los anteriores).
+        c5. Total de los inversores seleccionados de los 20, en cantidad porcentual (lo podemos sumar de los anteriores).
+        c6. Número del puesto que ocupa cada inversor en cada empresa.
+        c7. Industry del Parent.
+        c8. País de la empresa.
+        
+```{r}
+tabla_accionistas_renombrada_inversores <- tabla_accionistas_renombrada %>%
+  group_by(empresa_principal, empresa_principal_industria, empresa_principal_pais, investor_name) %>%
+  summarise(value_inversor = sum(value, na.rm = TRUE), 
+            outstanding_inversor = round(100*sum(outstanding, na.rm = TRUE),2),
+            .groups = "drop"
+            ) %>%
+  group_by(empresa_principal, empresa_principal_industria, empresa_principal_pais) %>%
+  arrange(empresa_principal, desc(value_inversor)) %>%
+  mutate(rank_investor_name_absoluto = row_number(), 
+         value_inversor_respecto_valor_declarado = round(100*value_inversor/sum(value_inversor, na.rm = TRUE),2)
+         ) %>%
+  ungroup() %>%
+  group_by(investor_name) %>%
+  mutate(value_inversor_respecto_inversor_total = round(100*value_inversor/sum(value_inversor, na.rm = TRUE),2)) %>%
+  ungroup() %>%
+  filter(investor_name %in% nombres_empresas_seleccionadas) %>%
+  group_by(empresa_principal, empresa_principal_industria, empresa_principal_pais) %>%
+  mutate(rank_investor_name_relativo = row_number()) %>%
+  ungroup() %>%
+  arrange(empresa_principal, empresa_principal_pais, empresa_principal_industria, investor_name) %>%
+  select(empresa_principal, empresa_principal_pais, empresa_principal_industria, investor_name, value_inversor, rank_investor_name_absoluto, rank_investor_name_relativo, everything())
+
+tabla_accionistas_renombrada_inversores_outstanding_graficos <- tabla_accionistas_renombrada %>%
+  group_by(empresa_principal, investor_name) %>%
+  summarise(outstanding_inversor = round(100*sum(outstanding, na.rm = TRUE),2),
+            .groups = "drop"
+            )
+y_max <- 30
+outstanding_inversor_max <- 15
+
+outliers_tabla <- tabla_accionistas_renombrada_inversores_outstanding_graficos %>%
+  group_by(empresa_principal) %>%
+  mutate(
+    q1 = quantile(outstanding_inversor, 0.25),
+    q3 = quantile(outstanding_inversor, 0.75),
+    iqr = q3 - q1,
+    #is_outlier = (outstanding_inversor < q1 - 1.5*iqr) | (outstanding_inversor > q3 + 1.5*iqr),
+    is_outlier = outstanding_inversor >= outstanding_inversor_max,
+    posicion_y = if_else(outstanding_inversor > y_max, y_max - runif(n(), min=0, max=5), outstanding_inversor)
+  ) %>%
+  filter(is_outlier)
+
+n_empresas <- n_distinct(tabla_accionistas_renombrada_inversores_outstanding_graficos$empresa_principal)
+n_por_pagina <- 28
+n_paginas <-  ceiling(n_empresas / n_por_pagina)
+
+for(i in 1:n_paginas){
+  grafico <- ggplot(tabla_accionistas_renombrada_inversores_outstanding_graficos,
+                    aes(x="", y=outstanding_inversor)) + 
+    geom_violin(trim = FALSE, adjust=0.5) +
+    geom_jitter(width = 0.1, alpha = 0.3) +
+    geom_point(data = outliers_tabla, aes(y = posicion_y), color = "red", size = 2) +
+    geom_text(data = outliers_tabla, aes(y = posicion_y, 
+                                         label = paste0(investor_name," - ",outstanding_inversor,"%")
+                                         ),
+              vjust = -0.5, size = 2, color = "red") +
+    facet_wrap_paginate(~ empresa_principal, ncol = 4, nrow = 7, page = i, scales = "free") +
+    coord_cartesian(ylim = c(0, y_max)) +
+    labs(y = "Porcentaje de propiedad", x = NULL) +
+    theme_minimal() +
+    theme(strip.text = element_text(face = "bold"))
+
+    ggsave(paste0("./export/graficos/shareholders/outsanding_empresas_", i, ".pdf"), 
+           plot = grafico, width = 10, height = 15)
+    
+}
+
+archivos <- paste0("./export/graficos/shareholders/outsanding_empresas_", 1:n_paginas,".pdf")
+cmd <- paste("pdftk", paste(archivos, collapse = " "), "cat output ./export/graficos/shareholders/grafico_empresas_unido.pdf")
+system(cmd)
+
+outstanding_inversor_peq_sup <- 3
+outstanding_inversor_med_sup <- 10
+columna_pequenos_numero <- paste0("outstanding_0_",outstanding_inversor_peq_sup,"_numero")
+columna_pequenos_valor <- paste0("outstanding_0_",outstanding_inversor_peq_sup,"_valor")
+columna_medianos_numero <- paste0("outstanding_",outstanding_inversor_peq_sup,"_",outstanding_inversor_med_sup,"_numero")
+columna_medianos_valor <- paste0("outstanding_",outstanding_inversor_peq_sup,"_",outstanding_inversor_med_sup,"_valor")
+columna_grandes_numero <- paste0("outstanding_",outstanding_inversor_med_sup,"_mayor","_numero")
+columna_grandes_valor <- paste0("outstanding_",outstanding_inversor_med_sup,"_mayor","_valor")
+
+tabla_accionistas_renombrada_inversores_outstanding_summary <- tabla_accionistas_renombrada %>%
+  group_by(empresa_principal, empresa_principal_industria, empresa_principal_pais, investor_name) %>%
+  summarise(value_inversor = sum(value, na.rm = TRUE), 
+            outstanding_inversor = round(100*sum(outstanding, na.rm = TRUE),2),
+            .groups = "drop"
+            ) %>%
+  group_by(empresa_principal) %>%
+  summarise(outsanding_total = round(sum(outstanding_inversor, na.rm = TRUE),2),
+            outstanding_total_ceros = sum(if_else(outstanding_inversor == 0, 1, 0), na.rm = TRUE),
+            !!columna_pequenos_numero := sum(if_else(outstanding_inversor <= outstanding_inversor_peq_sup, 1, 0), na.rm = TRUE),
+            !!columna_medianos_numero := sum(if_else((outstanding_inversor > outstanding_inversor_peq_sup & outstanding_inversor <= outstanding_inversor_med_sup),1,0), na.rm = TRUE),
+            !!columna_grandes_numero := sum(if_else(outstanding_inversor > outstanding_inversor_med_sup, 1, 0), na.rm = TRUE),
+            !!columna_pequenos_valor := sum(if_else(outstanding_inversor <= outstanding_inversor_peq_sup, outstanding_inversor, 0), na.rm = TRUE),
+            !!columna_medianos_valor := sum(if_else((outstanding_inversor > outstanding_inversor_peq_sup & outstanding_inversor <= outstanding_inversor_med_sup),outstanding_inversor,0), na.rm = TRUE),
+            !!columna_grandes_valor := sum(if_else(outstanding_inversor > outstanding_inversor_med_sup, outstanding_inversor, 0), na.rm = TRUE),
+            .groups = "drop"
+            )
+
+tabla_accionistas_renombrada_inversores_wider <- tabla_accionistas_renombrada_inversores %>%
+  pivot_wider(names_from = investor_name, values_from = c(rank_investor_name_absoluto,rank_investor_name_relativo, value_inversor, outstanding_inversor, value_inversor_respecto_valor_declarado, value_inversor_respecto_inversor_total))
+
+cat("<h3> Mirada desde las empresas, Paper 1</h3>\n")
+tabla_accionistas_renombrada_inversores %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_inversores, file = "./export/tablas/shareholders/tabla_mirada_empresas_paper_1.csv")
+
+cat("<h3> Mirada desde las empresas, Paper 1 Wider</h3>\n")
+tabla_accionistas_renombrada_inversores_wider %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_inversores_wider, file = "./export/tablas/shareholders/tabla_mirada_empresas_paper_1_wider.csv")
+
+cat("<h3> Mirada de la composición de los accionistas de las empresas a partir de su outstanding, Paper 1</h3>\n")
+tabla_accionistas_renombrada_inversores_outstanding_summary %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_inversores_outstanding_summary, file = "./export/tablas/shareholders/tabla_accionistas_renombrada_inversores_outstanding_summary.csv")
+
+```
+
+
+### 0.4 Tabla con mirada en los sectores de la economía (subindustry type)
+
+Generar 7 tipos de empresas según la actividad principal del Parent y mirar las siguientes preguntas:
+1) Tipo Electrico: Empresas cuya principal actividad es una de las siguientes.
+Electric Utilities + Natural Gas Utilities + Water & Related Utilities
+2) Tipo Renovables: Empresas cuya principal actividad es una de las siguientes.
+Renewable Fuels + Renewable Energy & Equipment
+3) Tipo Extractivo: Empresas cuya principal actividad es una de las siguientes.
+Forest & Wood Products + Fishing & Farming + Diversified Mining + Iron & Steel + Specialty Mining & Metals + Gold
+4) Tipo Inmobiliario: Empresas cuya principal actividad es una de las siguientes.
+Real Estate Rental, Development & Operations + Real Estate Services + Construction & Engineering
+5) Tipo Financiero: Empresas cuya principal actividad es una de las siguientes.
+Banks + Investment Holding Companies + Diversified Investment Services+ Corporate Financial Services+ Investment Management & Fund Operators + Investment Banking & Brokerage Services
+6) Tipo Alimentación: Empresas cuya principal actividad es una de las siguientes.
+Food Processing + Food Retail & Distribution + Non-Alcoholic Beverages
+7) Tipo Otros: Todas las demás empresas.
+
+Las columnas de esta tabla serán:
+        c1. Nombre del subindustry type.
+        c2. Cada inversor, con la cantidad neta
+        c3. Cada inversor, con la cantidad porcentual.
+        c4. Total de los inversores seleccionados, en cantidad neta (lo podemos sumar de los anteriores).
+        c5. Total de los inversores seleccionados, en cantidad porcentual (lo podemos sumar de los anteriores).
+        c6. Número del puesto que ocupa cada inversor en cada empresa. Imagino que se refiere en cada industria reclasificada.
+
+
+```{r}
+tipo_electrico <- c("Electric Utilities", "Natural Gas Utilities", "Water & Related Utilities")
+tipo_renovables <- c("Renewable Fuels", "Renewable Energy & Equipment")
+tipo_extractivo <- c("Forest & Wood Products", "Fishing & Farming", "Diversified Mining", "Iron & Steel", "Specialty Mining & Metals", "Gold")
+tipo_inmobiliario <- c("Real Estate Rental", "Development & Operations", "Real Estate Services", "Construction & Engineering")
+tipo_financiero <- c("Banks", "Investment Holding Companies", "Diversified Investment Services", "Corporate Financial Services", "Investment Management & Fund Operators", "Investment Banking & Brokerage Services")
+tipo_alimentacion <- c("Food Processing","Food Retail & Distribution","Non-Alcoholic Beverages")
+tipo_todos <- c(tipo_electrico, tipo_renovables, tipo_extractivo, tipo_inmobiliario, tipo_financiero, tipo_alimentacion)
+
+tabla_accionistas_renombrada$industry_reclassified <- "otro"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_electrico] <- "eléctrico"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_renovables] <- "renovables"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_extractivo] <- "extractivo"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_inmobiliario] <- "inmobiliario"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_financiero] <- "financiero"
+tabla_accionistas_renombrada$industry_reclassified[tabla_accionistas$empresa_principal_industria %in% tipo_alimentacion] <- "alimentación"
+
+tabla_accionistas_renombrada_industry <- tabla_accionistas_renombrada %>%
+  group_by(industry_reclassified, investor_name) %>%
+  summarise(value_investor_name = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  group_by(industry_reclassified) %>%
+  arrange(industry_reclassified, desc(value_investor_name)) %>%
+  mutate(rank_investor_name_industry_reclassified_absoluto = row_number(),
+         value_investor_name_respecto_industry_reclassified_absoluto = round(100*value_investor_name/sum(value_investor_name, na.rm = TRUE),2)
+        ) %>%
+  filter (investor_name %in% nombres_empresas_seleccionadas) %>%
+  ungroup() %>%
+  group_by(industry_reclassified) %>%
+  arrange(industry_reclassified, desc(value_investor_name)) %>%
+  mutate(rank_investor_name_industry_reclassified_relativo = row_number(),
+         value_investor_name_respecto_industry_reclassified_relativo = round(100*value_investor_name/sum(value_investor_name, na.rm = TRUE),2)
+        ) %>%
+  ungroup()
+
+tabla_accionistas_renombrada_industry_wider <- tabla_accionistas_renombrada_industry %>%
+  pivot_wider(names_from = investor_name,
+              values_from = c(value_investor_name, rank_investor_name_industry_reclassified_absoluto, value_investor_name_respecto_industry_reclassified_absoluto, rank_investor_name_industry_reclassified_relativo, value_investor_name_respecto_industry_reclassified_relativo)
+              )
+
+cat("<h3> Mirada desde las industrias, Paper 1</h3>\n")
+tabla_accionistas_renombrada_industry %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_industry, file = "./export/tablas/shareholders/tabla_mirada_industrias_paper_1.csv")
+
+cat("<h3> Mirada desde las industrias, Paper 1 Wider</h3>\n")
+tabla_accionistas_renombrada_industry_wider %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+write.csv(tabla_accionistas_renombrada_industry_wider, file = "./export/tablas/shareholders/tabla_mirada_industrias_paper_1_wider.csv")
+
+
+```
+
+
+
+## 1. El comportamiento de BlackRock.
+
+### 1.1. Dónde actúa BlackRock en América Latina: la búsqueda de dónde está el total de inversión en cada país (gráfica a1, ya mostrada), también en términos porcentuales del total de inversión de BlackRock en cada país en relación al total de la inversión total que hay en cada país como sumatoria de todas las empresas (gráfica a2).
+
+
+```{r }
+tabla_blackrock_pais <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name","blackrock","empresa_principal_pais", "total_value")
+tabla_accionistas_totales_pais_empresas <- lista_empresas_principales$entidadesAccionistasTabuladoAgrupado("empresa_principal_pais","total_value")
+
+tabla_blackrock_pais$tipo <- "Blackrock"
+tabla_accionistas_totales_pais_empresas$tipo <- "total"
+
+tabla_1.1 <- bind_rows(tabla_accionistas_totales_pais_empresas[,c("empresa_principal_pais","tipo","total_value")],tabla_blackrock_pais[,c("empresa_principal_pais","tipo","total_value")])
+tabla_1.1 <- bind_rows(tabla_1.1, tibble(empresa_principal_pais = "Argentina", tipo = "Blackrock", total_value = 0))
+tabla_1.1 <- tabla_1.1 %>% group_by(empresa_principal_pais) %>% 
+  mutate(total_pais = total_value[tipo=="total"], total_per = round(100*ifelse(tipo=="Blackrock",total_value,total_pais)/total_pais,2))
+
+graficosBlackrock <- tibble(indice=1:30, graph = list(30))
+
+g1 <- ggplot(tabla_1.1, aes(x=empresa_principal_pais, y=total_value, group = tipo, fill = tipo)) +
+  geom_bar(stat="identity", position = "dodge") +
+  labs(title="Inversiones de Blackrock por país en valores absolutos",
+       x="país", y="millones de dólares") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) 
+
+g2 <- ggplot(tabla_1.1, aes(x=empresa_principal_pais, y=total_per, group = tipo, fill = tipo)) +
+  geom_bar(stat="identity", position = "dodge") +
+  labs(title="Inversiones de Blackrock por país en relación al total invertido\npor todas las empresas",
+       x="país", y="porcentaje") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) 
+
+graficosBlackrock$graph[[1]] <- g1 / g2
+
+graficosBlackrock$graph[[1]]
+
+#for (graph in graficosBlackrock[[2]]) {
+  #jpeg(paste0("./export/graficos/graficos_blackrock_",i,".jpg"), width = 2048, height = 1536, res = 300, units = "px")
+  #grid.draw(graph)
+  #dev.off()
+ # i<-i+1
+#}
+
+```
+  
+### 1.2 Desde dónde actúa BlackRock: mostrar desde qué filiales de BlackRock se invierte en qué países de América Latina (gráfica a3).
+  
+```{r }
+tabla_blackrock_total <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name","blackrock")
+
+graficosBlackrock$graph[[3]] <- ggplot(tabla_blackrock_total, aes(x=investor_name, y=value, group=empresa_principal_pais, fill=empresa_principal_pais)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title="Inversiones de Blackrock por país en relación al total\ninvertido por todas las empresas",
+       x="filial", y="valor total invertido", fill="país") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(
+    legend.text = element_text(size = 6), 
+    legend.title = element_text(size = 8) 
+  )
+
+graficosBlackrock$graph[[4]] <- ggplot(tabla_blackrock_total, aes(x=empresa_principal_pais, y=value, group=investor_name, fill=investor_name)) +
+  geom_bar(stat = "identity", position = "stack") +
+  labs(title="Inversiones de Blackrock por país en relación al total\ninvertido por todas las empresas",
+       x="país", y="valor total invertido", fill="filial") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(
+    legend.text = element_text(size = 6), 
+    legend.title = element_text(size = 8) 
+  )
+
+graficosBlackrock$graph[[3]]
+
+cat("<br>")  # Espacio entre tablas
+
+graficosBlackrock$graph[[4]]
+```
+
+### 1.3 En qué sectores invierte prioritariamente: la búsqueda de cuál es el porcentaje de inversión de BlackRock en cada sector según la Industry de la primera línea nivel de TreeStructure, según los diferentes países (gráfica a4, ya mostrada).
+  
+```{r }
+tabla_blackrock_industria <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name","blackrock","empresa_principal_industria", "total_value")
+
+graficosBlackrock$graph[[5]] <- sacaDiagramaBarras(tabla_blackrock_industria, "empresa_principal_industria", "total_value_per", "Inversiones de Blackrock por industria (%)") 
+
+graficosBlackrock$graph[[5]]
+```
+  
+### 1.4 Predominancia de BlackRock: En cuántas empresas tiene BlackRock más del 10% y del 5% por país (gráfica a5).
+  
+```{r }
+
+lista_empresas_blackrock <- lista_empresas_principales$extraeEntidadesNombreAccionistas("blackrock")
+
+tabla_empresas_blackrock <- lista_empresas_blackrock$entidadesAccionistasTabulado()
+tabla_empresas_blackrock <- tabla_empresas_blackrock %>% group_by(empresa_principal) %>% mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2))
+
+tabla_blackrock_predominancia_5 <- tabla_empresas_blackrock %>% filter(str_detect(tolower(investor_name), "blackrock")&(value_per >= 5))
+tabla_blackrock_predominancia_5$umbral <- "5%"
+tabla_blackrock_predominancia_10 <- tabla_empresas_blackrock %>% filter(str_detect(tolower(investor_name), "blackrock")&(value_per >= 10))
+tabla_blackrock_predominancia_10$umbral <- "10%"
+tabla_blackrock_predominancia <- bind_rows(tabla_blackrock_predominancia_5, tabla_blackrock_predominancia_10)
+tabla_blackrock_predominancia$empresa_matriz <- "Blackrock"
+
+tabla_blackrock_predominancia_pais <- tabla_blackrock_predominancia %>% group_by(empresa_principal_pais, umbral) %>% summarise(total_empresas=n(),empresas=paste(unique(empresa_principal), collapse = ", "), .groups = "drop")
+
+graficosBlackrock$graph[[6]] <- ggplot(tabla_blackrock_predominancia_pais, aes(x=empresa_principal_pais, y=total_empresas, group= umbral, fill=umbral)) +
+  geom_bar(stat="identity",position="dodge") +
+  labs(title="Número total de empresas en las que Blackrock cuenta con\nuna participación mayor al umbral, por país",
+       x="país", y="número total de empresas", fill="umbral") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosBlackrock$graph[[6]]
+```
+
+### 1.5 Comparación con otros grandes inversores: A partir del gráfico anterior, mostrar los datos del 10% y del 5% por país al lado de BlackRock (sin desagregar filiales) y Vanguard (gráfica a6).
+  
+```{r }
+lista_vanguard <- lista_empresas_principales$extraeEntidadesNombreAccionistas("vanguard")
+
+tabla_vanguard <- lista_vanguard$entidadesAccionistasTabulado()
+tabla_vanguard <- tabla_vanguard %>% group_by(empresa_principal) %>% mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2))
+
+tabla_vanguard_predominancia_5 <- tabla_vanguard %>% filter(str_detect(tolower(investor_name), "vanguard")&(value_per >= 5))
+tabla_vanguard_predominancia_5$umbral <- "5%"
+tabla_vanguard_predominancia_10 <- tabla_vanguard %>% filter(str_detect(tolower(investor_name), "vanguard")&(value_per >= 10))
+tabla_vanguard_predominancia_10$umbral <- "10%"
+tabla_vanguard_predominancia <- bind_rows(tabla_vanguard_predominancia_5, tabla_vanguard_predominancia_10)
+
+tabla_vanguard_predominancia$empresa_matriz <- "Vanguard"
+
+tabla_comparativa <- bind_rows(tabla_blackrock_predominancia, tabla_vanguard_predominancia)
+
+tabla_comparativa <- tabla_comparativa %>% group_by(empresa_principal_pais,umbral,empresa_matriz) %>% summarise(total_empresas=n(),empresas=paste(unique(empresa_principal), collapse = ", "),.groups = "drop")
+
+graficosBlackrock$graph[[7]] <- ggplot(tabla_comparativa, aes(x=empresa_principal_pais, y=total_empresas, fill=empresa_matriz, group=empresa_matriz)) +
+  geom_bar(stat="identity", position="dodge") +
+  labs(title="Comparación entre Blackrock y Vanguard del número total de empresas\ncon una participación mayor al umbral, por país",
+       x="país", y="número total de empresas", fill="empresa") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  facet_grid(umbral ~ .)
+
+
+graficosBlackrock$graph[[7]]
+
+```
+
+### 1.6 Profundizar en México cómo actúa BlackRock: Ubicar un gráfico de dispersión con el porcentaje de inversión de BlackRock (eje de las y) y el tamaño del grupo en millón de dólares (eje de las x). Si es factible poner diferentes colores o símbolos para los diferentes sectores de Industry de las empresas. (Gráfico a7).
+  
+```{r }
+lista_empresas_blackrock_mexico <- lista_empresas_blackrock$extraeEntidadesPais("mexico")
+
+
+tabla_blackrock_mexico <- lista_empresas_blackrock_mexico$entidadesAccionistasTabulado() %>%
+  group_by(empresa_principal) %>% mutate(value_per=round(100*value/sum(value, na.rm = TRUE),2), valor_grupo=sum(value, na.rm = TRUE)) %>% ungroup()
+
+tabla_blackrock_mexico_filtrado <- tabla_blackrock_mexico %>% filter(str_detect(tolower(investor_name), "blackrock"))
+
+tabla_blackrock_mexico_filtrado_agrupado <- tabla_blackrock_mexico_filtrado %>% group_by(empresa_principal, empresa_principal_industria) %>%
+  summarise(total_value_per=sum(value_per, na.rm = TRUE), valor_grupo = sum(valor_grupo, na.rm = TRUE)/n(), .groups = "drop")
+
+graficosBlackrock$graph[[8]] <- ggplot(tabla_blackrock_mexico_filtrado, aes(x=valor_grupo, y=value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock México",
+       x="valor total del grupo", y="peso relativo de blackrock", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+legend <- cowplot::get_legend(graficosBlackrock$graph[[8]])
+
+graficosBlackrock$graph[[8]] <- graficosBlackrock$graph[[8]] + theme(legend.position = "none")
+
+graficosBlackrock$graph[[9]] <- ggplot(tabla_blackrock_mexico_filtrado_agrupado, aes(x=valor_grupo, y=total_value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock México (agrupado)",
+       x="valor total del grupo", y="peso relativo de blackrock (agrupado)", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(legend.position = "none")
+
+graficosBlackrock$graph[[10]] <- (graficosBlackrock$graph[[8]] / graficosBlackrock$graph[[9]])
+
+grid.arrange(graficosBlackrock$graph[[10]])
+grid.newpage()
+grid.draw(legend)
+  
+```
+  
+### 1.7 Profundizar en Chile cómo actúa BlackRock: Ubicar un gráfico de dispersión con el porcentaje de inversión de BlackRock (eje de las y) y el tamaño del grupo en millón de dólares (eje de las x). Si es factible poner diferentes colores o símbolos para los diferentes sectores de Industry de las empresas. (Gráfico a8).
+  
+```{r }
+lista_empresas_blackrock_chile <- lista_empresas_blackrock$extraeEntidadesPais("chile")
+
+
+tabla_blackrock_chile <- lista_empresas_blackrock_chile$entidadesAccionistasTabulado() %>%
+  group_by(empresa_principal) %>% mutate(value_per=round(100*value/sum(value, na.rm = TRUE),2), valor_grupo=sum(value, na.rm = TRUE)) %>% ungroup()
+
+tabla_blackrock_chile_filtrado <- tabla_blackrock_chile %>% filter(str_detect(tolower(investor_name), "blackrock"))
+
+tabla_blackrock_chile_filtrado_agrupado <- tabla_blackrock_chile_filtrado %>% group_by(empresa_principal, empresa_principal_industria) %>%
+  summarise(total_value_per=sum(value_per, na.rm = TRUE), valor_grupo = sum(valor_grupo, na.rm = TRUE)/n(), .groups = "drop")
+
+graficosBlackrock$graph[[11]] <- ggplot(tabla_blackrock_chile_filtrado, aes(x=valor_grupo, y=value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock Chile",
+       x="valor total del grupo", y="peso relativo de Blackrock", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+legend <- cowplot::get_legend(graficosBlackrock$graph[[11]])
+
+graficosBlackrock$graph[[12]] <- graficosBlackrock$graph[[11]] + theme(legend.position = "none")
+
+graficosBlackrock$graph[[13]] <- ggplot(tabla_blackrock_chile_filtrado_agrupado, aes(x=valor_grupo, y=total_value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock Chile (agrupado)",
+       x="valor total del grupo", y="peso relativo de Blackrock (agrupado)", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(legend.position = "none")
+
+graficosBlackrock$graph[[14]] <- (graficosBlackrock$graph[[12]] / graficosBlackrock$graph[[13]]) 
+
+grid.arrange(graficosBlackrock$graph[[14]])
+grid.newpage()
+grid.draw(legend)
+```
+  
+### 1.8 Profundizar en Brasil cómo actúa BlackRock y Vanguard: Ubicar un gráfico de dispersión con el porcentaje de inversión de BlackRock (eje de las y) y el tamaño del grupo en millón de dólares (eje de las x). Si es factible poner diferentes colores o símbolos para los diferentes sectores de Industry de las empresas. (Gráfico a9).
+  
+```{r }
+lista_empresas_blackrock_brasil <- lista_empresas_blackrock$extraeEntidadesPais("brazil")
+
+
+tabla_blackrock_brasil <- lista_empresas_blackrock_brasil$entidadesAccionistasTabulado() %>%
+  group_by(empresa_principal) %>% mutate(value_per=round(100*value/sum(value, na.rm = TRUE),2), valor_grupo=sum(value, na.rm = TRUE)) %>% ungroup()
+
+tabla_blackrock_brasil_filtrado <- tabla_blackrock_brasil %>% filter(str_detect(tolower(investor_name), "blackrock"))
+
+tabla_blackrock_brasil_filtrado_agrupado <- tabla_blackrock_brasil_filtrado %>% group_by(empresa_principal, empresa_principal_industria) %>%
+  summarise(total_value_per=sum(value_per, na.rm = TRUE), valor_grupo = sum(valor_grupo, na.rm = TRUE)/n(), .groups = "drop")
+
+graficosBlackrock$graph[[15]] <- ggplot(tabla_blackrock_brasil_filtrado, aes(x=valor_grupo, y=value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock Brasil",
+       x="valor total del grupo", y="peso relativo de Blackrock", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6)
+  )
+
+legend <- cowplot::get_legend(graficosBlackrock$graph[[15]])
+
+graficosBlackrock$graph[[16]] <- graficosBlackrock$graph[[15]] + theme(legend.position = "none")
+
+graficosBlackrock$graph[[17]] <- ggplot(tabla_blackrock_brasil_filtrado_agrupado, aes(x=valor_grupo, y=total_value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Blackrock Brasil (agrupado)",
+       x="valor total del grupo", y="peso relativo de Blackrock (agrupado)", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(legend.position = "none")
+
+graficosBlackrock$graph[[18]] <- (graficosBlackrock$graph[[16]] / graficosBlackrock$graph[[17]])
+
+grid.arrange(graficosBlackrock$graph[[18]])
+grid.newpage()
+grid.draw(legend)
+
+```
+ 
+Se muestran ahora los datos para Vanguard.
+ 
+```{r }
+lista_empresas_vanguard_brasil <- lista_empresas_vanguard$extraeEntidadesPais("brazil")
+
+
+tabla_vanguard_brasil <- lista_empresas_vanguard_brasil$entidadesAccionistasTabulado() %>%
+  group_by(empresa_principal) %>% mutate(value_per=round(100*value/sum(value, na.rm = TRUE),2), valor_grupo=sum(value, na.rm = TRUE)) %>% ungroup()
+
+tabla_vanguard_brasil_filtrado <- tabla_vanguard_brasil %>% filter(str_detect(tolower(investor_name), "vanguard"))
+
+tabla_vanguard_brasil_filtrado_agrupado <- tabla_vanguard_brasil_filtrado %>% group_by(empresa_principal, empresa_principal_industria) %>%
+  summarise(total_value_per=sum(value_per, na.rm = TRUE), valor_grupo = sum(valor_grupo, na.rm = TRUE)/n(), .groups = "drop")
+
+graficosBlackrock$graph[[19]] <- ggplot(tabla_vanguard_brasil_filtrado, aes(x=valor_grupo, y=value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Vanguard Brasil",
+       x="valor total del grupo", y="peso relativo de Vanguard", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(
+    legend.text = element_text(size = 6),
+    legend.title = element_text(size = 6)
+  )
+
+legend <- cowplot::get_legend(graficosBlackrock$graph[[19]])
+
+graficosBlackrock$graph[[20]] <- graficosBlackrock$graph[[19]] + theme(legend.position = "none")
+
+graficosBlackrock$graph[[21]] <- ggplot(tabla_vanguard_brasil_filtrado_agrupado, aes(x=valor_grupo, y=total_value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) +
+  geom_point() +
+  labs(title="Diagrama de dispersión Vanguard Brasil (agrupado)",
+       x="valor total del grupo", y="peso relativo de Vanguard (agrupado)", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(legend.position = "none")
+
+graficosBlackrock$graph[[22]] <- (graficosBlackrock$graph[[20]] / graficosBlackrock$graph[[21]]) 
+
+grid.arrange(graficosBlackrock$graph[[22]])
+grid.newpage()
+grid.draw(legend)
+```
+  
+  
+## 2. Análisis de la inversión sobre un conjunto de empresas similares en Brasil. 
+Generar un subgrupo de empresas que se llame BrasilAgroFamiliares compuesto por las siguientes 16 grupos: (1) JBS SA, (2) Raizen SA, (3) Cosan SA, (4) Marfrig Global Foods SA, (5) Ambev SA, (6) BRF SA, (7) Suzano SA, (8) Minerva SA/BRASIL, (9) Klabin SA, (10) Agrogalaxy Participacoes SA, (11) M Dias Branco SA, (12) Camil Alimentos SA, (13) Dexco SA, (14) SLC Agricola SA, (15) Sao Martinho S/A y (16) Fertilizantes Heringer SA.
+
+### 2.1 Comparación: Obtener los siguientes datos: (conjunto de datos b1).
+
+#### 2.1.1 Cuánto porcentaje posee BlackRock en cada una de estas compañías
+
+```{r }
+graficosPunto2 <- tibble(indice=1:30, graph = list(30))
+
+empresas_agrofamiliares_brasil <- c("JBS SA", "Raizen SA", "Cosan SA", "Marfrig Global Foods SA", "Ambev SA", "BRF SA", "Suzano SA", "Minerva SA", "Klabin SA", "AgroGalaxy Participacoes SA", "M Dias Branco SA", "Camil Alimentos SA", "Dexco SA", "SLC Agricola SA", "Sao Martinho SA", "Fertilizantes Heringer SA")
+
+lista_brasil_agronegocio <- lista_empresas_principales$extraeEntidadesNombre(empresas_agrofamiliares_brasil)
+
+tabla_brasil_blackrock <- lista_brasil_agronegocio$empresasAccionistasFiltrado("investor_name", "blackrock","empresa_principal","total_value")
+
+graficosPunto2$graph[[1]] <- sacaDiagramaBarras(tabla_brasil_blackrock, "empresa_principal", "total_value_per", "Porcentaje de Blackrock en las compañías")
+
+graficosPunto2$graph[[1]]
+
+```
+#### 2.1.2 Cuánto porcentaje posee BlackRock en promedio de todas ellas,
+
+```{r }
+
+tabla_brasil_valor_empresas <- lista_brasil_agronegocio$entidadesAccionistasTabuladoAgrupado("empresa_principal","total_value")[,c("empresa_principal", "total_value")]
+tabla_brasil_blackrock_valor <- tabla_brasil_blackrock[c("empresa_principal","total_value")]
+
+tabla_join <- inner_join(tabla_brasil_valor_empresas, tabla_brasil_blackrock_valor, by = "empresa_principal")
+colnames(tabla_join) <- c("empresa_principal", "valor_total", "valor_blackrock")
+
+resultado <- round(100*sum(tabla_join$valor_blackrock)/sum(tabla_join$valor_total),2)
+
+cat("El resultado es: ", resultado, sep = "")
+cat("<br>")  # Espacio entre tablas
+```
+
+#### 2.1.3 Cuánto porcentaje posee BlackRock en el conjunto de Brasil.compar
+
+```{r }
+tabla_brasil_total_valor_empresas <- lista_empresas_brasil$entidadesAccionistasTabuladoAgrupado("empresa_principal","total_value")[,c("empresa_principal", "total_value")]
+
+tabla_brasil_total_blackrock_valor <- lista_empresas_brasil$empresasAccionistasFiltrado("investor_name","blackrock","empresa_principal","total_value")[c("empresa_principal","total_value")]
+
+tabla_join_total <- inner_join(tabla_brasil_total_valor_empresas, tabla_brasil_total_blackrock_valor, by = "empresa_principal")
+colnames(tabla_join_total) <- c("empresa_principal", "valor_total", "valor_blackrock")
+
+resultado_total <- round(100*sum(tabla_join_total$valor_blackrock)/sum(tabla_join_total$valor_total),2)
+
+cat("El resultado es: ", resultado_total, sep = "")
+cat("<br>")  # Espacio entre tablas
+```
+
+#### 2.1.4 Cuánto porcentaje posee BlackRock en las empresas brasileñas del Agro.
+
+Aquí falta especificar cómo escogemos a las empresas del agro. El agro puede ser más o menos amplio en función del marco de análisis.
+
+### 2.2 Obtener en el porcentaje para cada uno de estos grupos de inversions de los diferentes grupos fiscales (gráfico b2). Consideramos inicialmente a Luxembourg, Cayman Islands, Ireland, Switzerland, Bermuda, Hong Kong, Jersey, Netherlands, Singapore, British Virgin Islands.
+
+```{r }
+paraisos_fiscales <- c("Luxembourg", "Cayman Islands", "Ireland", "Switzerland", "Bermuda", "Hong Kong", "Jersey", "Netherlands", "Singapore", "British Virgin Islands")
+tabla_paraisos <- lista_brasil_agronegocio$entidadesAccionistasTabuladoAgrupado("country_region","total_value") %>%
+  filter(country_region %in% paraisos_fiscales)
+
+graficosPunto2$graph[[2]] <- sacaDiagramaBarras(tabla_paraisos, "country_region","total_value_per", "Valor relativo de inversión de accionistas de\nparaísos fiscales para los grupos del agro brasileiro")
+i <- 1
+lista_tablas <- list()
+for (empresa in lista_brasil_agronegocio$empresas){
+  tabla_accionistas_pais <- empresa$accionistasTabuladoAgrupado("country_region")
+  tabla_accionistas_pais <- bind_cols(tibble(empresa_principal = rep(empresa$name, nrow(tabla_accionistas_pais))), tabla_accionistas_pais)
+  lista_tablas <- append(lista_tablas, list(tabla_accionistas_pais))
+  if(nrow(tabla_accionistas_pais > 0)){
+    graficosPunto2$graph[[2+i]] <- sacaDiagramaBarras(tabla_accionistas_pais %>% filter(country_region %in% paraisos_fiscales), "country_region", "total_value_per", paste0("Valor relativo de inversión de accionistas de paraísos fiscales\npara la empresa", empresa$name))
+    cat("<h3>Gráfico de ", empresa$name, "</h3>\n", sep="")  # Agrega un título HTML para cada tabla
+    print(graficosPunto2$graph[[2+i]])
+    cat("<br>")  # Espacio entre tablas
+  }
+  i <- i + 1
+  
+}
+
+
+
+```
+
+### 2.3 Listar el principal poseedor de cada una de las 16 empresas, mostrando su nombre, origen, valor absoluto y porcentual, ordenados por valor absoluto (tabla b3).
+
+```{r }
+lista_tablas <- list()
+
+for (empresa in lista_brasil_agronegocio$empresas){
+  tabla <- empresa$accionistasTabuladoAgrupado("investor_name","total_value")
+  lista_tablas <- append(lista_tablas, list(tabla))
+  if(nrow(tabla) > 0){
+    cat("<h3>Principales tres accionistas de ",empresa$name,"</h3>\n", sep = "")
+    print(
+      tabla[1:5,c("investor_name","total_country_region","total_value","total_value_per")] %>%
+      kbl(format = "html") %>% 
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+      scroll_box(width = "100%", height = "200px")
+    )
+    cat("<br>")  # Espacio entre tablas 
+  }
+}
+
+```
+
+### 2.4 Listar los tres principales poseedores de cada una de las 16 empresas, mostrando su nombre, origen, valor absoluto y porcentual, ordenados por valor absoluto (tabla b4).
+###3 Indagación alrededor de un inversor familiar trasnacional: Luksic.
+
+Esto se ve en el resultado anterior.
+
+## 3. Análisis del grupo Luksic y otros.
+
+### 3.1 Donde actúa Luksic y cuáles son sus sectores de industria: Seleccionar todas las empresas que tengan entre sus propietarios algo que diga “Luksic” y ver en qué países actúan (gráfico c1) y cuáles son los sectores de esas empresas (gráfico c2).
+
+```{r }
+graficosPunto3 <- tibble(indice=1:30, graph = list(30))
+
+tabla_luksic_pais <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name", "luksic", "empresa_principal_pais", "total_value")
+
+tabla_luksic_industria <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name", "luksic", "empresa_principal_industria", "total_value")
+
+g1 <- ggplot(tabla_luksic_pais, aes(x=empresa_principal_pais, y=total_value_per)) +  
+  geom_bar(stat="identity") +
+  labs(title="Inversiones del grupo familiar Luksic por país",
+       x="país", y="valor percentual") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+g2 <- ggplot(tabla_luksic_industria, aes(x=empresa_principal_industria, y=total_value_per)) +  
+  geom_bar(stat="identity") +
+  labs(title="Inversiones del grupo familiar Luksic por industria",
+       x="industria", y="valor percentual") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+  
+
+graficosPunto3$graph[[1]] <- g1 / g2
+
+graficosPunto3$graph[[1]]
+
+```
+
+### 3.2 Ver el comportamiento de cuatro inversionistas no latinomericanos (State Street, Santander, Blackrock, Vanguard) en empresas en las que Luksic posee más del 20% del valor total (gráfico c3).
+
+Esta es una pregunta que calza mucho mejor en el análisis de redes por lo que la respuesta planteada ofrece datos más generales. A partir de estos datos, sin embargo, es posible también obtener la respuesta concreta.
+
+```{r }
+
+lista_luksic <- lista_empresas_principales$extraeEntidadesNombreAccionistas("luksic")
+
+tabla_accionistas_luksic <- lista_luksic$entidadesAccionistasTabuladoAgrupado("investor_name","total_value_per")
+
+cat("<h3>Resto de accionistas en los que el grupo Lucksic tiene participación</h3>\n")
+tabla_accionistas_luksic[tabla_accionistas_luksic$total_value_per > 2,c("investor_name","total_empresa_principal","total_empresa_principal_pais","total_empresa_principal_industria","total_value_per")] %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "200px")
+cat("<br>")  # Espacio entre tablas
+```
+
+### 3.3 Ver la tipología de inversores institucionales internacionales en el grupo Luksic:  en cada una de las empresas donde Luksic es inversor, ver los porcentajes que suman las tipologías de la columna “Investor Sub-Type”, denominadas “Pension Fund” y “Bank and Trust” (gráfico c4).
+
+```{r }
+tabla_accionistas_luksic_investor_subtype <- lista_luksic$entidadesAccionistasTabuladoAgrupado("investor_subtype", "total_value_per")
+
+cat("<h3>Subtipos de inversionistas en el cojunto de empresas\nen las que participa el grupo Luksic</h3>\n")
+tabla_accionistas_luksic_investor_subtype[,c("investor_subtype","total_value_per")] %>%
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "200px")
+cat("<br>")  # Espacio entre tablas
+
+lista_tablas <- list()
+for(empresa in lista_luksic$empresas){
+  tabla <- empresa$accionistasTabuladoAgrupado("investor_subtype","total_value_per")
+  lista_tablas <- append(lista_tablas, list(tabla[,c("investor_subtype","total_value_per")]))
+  cat("<h3>Subtipos de inversionistas de",empresa$name,"</h3>\n")
+  print(
+    tabla[,c("investor_subtype", "total_value_per")] %>%
+    kbl() %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+    scroll_box(width = "100%", height = "400px")
+  )
+  cat("<br>")  # Espacio entre tablas
+}
+
+
+```
+
+### 3.4 Revisar si existe cross-shareholding entre Luksic y Angelini: Listar empresas donde el mayor inversor sea Luksic y además tengan inversiones de Angelini (tabla c5) y al revés, donde Angelini sea el principal inversor y tenga también de inversionista a Luksic (tabla c6).
+
+```{r }
+lista_luksic_angelini <- lista_luksic$extraeEntidadesNombreAccionistas("angelini")
+if(length(lista_luksic_angelini$empresas) == 0) print("No hay cross-shareholding entre Luksic y Angelini")
+```
+## 4 Sobre otros países de origen y comportamiento de grupos como multilatinas.
+
+### 4.1 Dónde hay más capital de otros países de la región: Considerar el porcentaje de propiedad en Brasil de países de América Latina que no son Brasil, lo mismo en México y lo mismo en Chile (gráfico d1).
+```{r }
+graficosPunto4 <- tibble(indice=1:30, graph = list(30))
+
+tabla_brasil <- lista_empresas_brasil$entidadesAccionistasTabuladoAgrupado("country_region","total_value_per")
+g1 <- sacaDiagramaBarras(tabla_brasil,"country_region","total_value_per","Países de los inversionistas de empresas brasileñas")
+
+tabla_mexico <- lista_empresas_mexico$entidadesAccionistasTabuladoAgrupado("country_region","total_value_per")
+g2 <- sacaDiagramaBarras(tabla_mexico,"country_region","total_value_per","Países de los inversionistas de empresas mexicanas")
+
+tabla_chile <- lista_empresas_chile$entidadesAccionistasTabuladoAgrupado("country_region","total_value_per")
+g3 <- sacaDiagramaBarras(tabla_chile,"country_region","total_value_per","Países de los inversionistas de empresas chilenas")
+
+graficosPunto4$graph[[1]] <- g1 / g2 / g3
+
+graficosPunto4$graph[[1]]
+
+```
+
+### 4.2 Ver de qué países es ese capital: Ver el porcentaje de inversión de cada país latinoamericano en Brasil, en México y en Chile (gráfico d2).
+
+Se muestra en el gráfico anterior.
+
+### 4.3 Identificar cuáles son los principales poseedores latinoamericanos en capital total de inversión en México y Chile que no sean mexicanos ni chilenos (gráfico d3).
+
+```{r }
+
+tabla_accionistas_brasil <- lista_empresas_brasil$entidadesAccionistasTabuladoAgrupado("investor_name","total_value")
+
+cat("<h3>Inversionistas no brasileros de empresas brasileñas</h3>\n")
+print(
+  tabla_accionistas_brasil[,c("investor_name","total_country_region","total_value")] %>%      
+  filter(total_country_region != "Brazil") %>%
+  head(10) %>%
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+tabla_accionistas_mexico <- lista_empresas_mexico$entidadesAccionistasTabuladoAgrupado("investor_name","total_value")
+
+cat("<h3>Inversionistas no mexicanos de empresas mexicanas</h3>\n")
+print(
+  tabla_accionistas_mexico[,c("investor_name","total_country_region","total_value")] %>%      
+  filter(total_country_region != "Mexico") %>%
+  head(10) %>%
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+tabla_accionistas_chile <- lista_empresas_chile$entidadesAccionistasTabuladoAgrupado("investor_name","total_value")
+
+cat("<h3>Inversionistas no chilenos de empresas chilenas</h3>\n")
+print(
+  tabla_accionistas_chile[,c("investor_name","total_country_region","total_value")] %>%      
+  filter(total_country_region != "Chile") %>%
+  head(10) %>%
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+```
+
+### 4.4 Identificar los 2 principales inversores de Noruega o de Suecia en cada uno de los tres países Chile, Brasil y México (gráfico d4).
+  
+```{r }
+
+tabla_accionistas_brasil_red <- tabla_accionistas_brasil %>% filter((total_country_region == "Sweden")| (total_country_region == "Norway"))
+
+cat("<h3>Inversionistas suecos o noruegos de empresas brasileñas</h3>\n")
+print(
+  tabla_accionistas_brasil_red[,c("investor_name","total_country_region","total_value")] %>%      
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+tabla_accionistas_mexico_red <- tabla_accionistas_mexico %>% filter((total_country_region == "Sweden")| (total_country_region == "Norway"))
+
+cat("<h3>Inversionistas suecos o noruegos de empresas mexicanas</h3>\n")
+print(
+  tabla_accionistas_mexico_red[,c("investor_name","total_country_region","total_value")] %>%      
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+cat("<h3>Inversionistas suecos o noruegos de empresas chilenas</h3>\n")
+tabla_accionistas_chile_red <- tabla_accionistas_chile %>% filter((total_country_region == "Sweden")| (total_country_region == "Norway"))
+print(
+  tabla_accionistas_chile_red[,c("investor_name","total_country_region","total_value")] %>%      
+  kbl() %>%  
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "400px")
+)
+cat("<br>")  # Espacio entre tablas
+
+```
+
+### 4.5 Ver la cantidad de inversión porcentual desde paraísos fiscales dividida por país (gráfico d5). Consideramos inicialmente a Luxembourg, Cayman Islands, Ireland, Switzerland, Bermuda, Hong Kong, Jersey, Netherlands, Singapore, British Virgin Islands.
+
+```{r }
+paraisos_fiscales <- c("Luxembourg", "Cayman Islands", "Ireland", "Switzerland", "Bermuda", "Hong Kong", "Jersey", "Netherlands", "Singapore", "British Virgin Islands")
+tabla_accionistas_paraisos_fiscales <- lista_empresas_principales$entidadesAccionistasTabuladoAgrupado("country_region","total_value") %>% filter(country_region %in% paraisos_fiscales)
+
+g1 <- sacaDiagramaBarras(tabla_accionistas_paraisos_fiscales, "country_region", "total_value", "Inversiones totales procedentes de paraísos fiscales")
+g2 <- sacaDiagramaBarras(tabla_accionistas_paraisos_fiscales, "country_region", "total_value_per", "Inversiones en porcentaje procedentes de paraísos fiscales")
+
+graficosPunto4$graph[[2]] <- g1 / g2
+
+graficosPunto4$graph[[2]]
+```
+
+### 4.6 Ver el comportamiento del Grupo Slim como multilatina: Colocar en un diagrama de dispersión las empresas no mexicanas donde Slim es inversor, en el eje de las “y” el porcentaje de propiedad y la cantidad de inversión en el eje de las “x”, con las bolitas por país con color o símbolo diferentes (gráfico d6). Tener en cuenta la recursividad, quizás en una empresa no es Slim quien invierte, pero sí una de las empresas que posee, que al menos serían America y Carso (con recursividad podría ser el gráfico d7).
+  
+  Para la recursividad usaremos el análisis de redes, ahora no merece la pena.
+  
+```{r }
+
+tabla_accionistas_slim <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name","slim")
+tabla_accionistas_slim <- tabla_accionistas_slim %>% group_by(investor_name) %>% mutate(value_per=round(100*value/empresa_principal_valor_total,2)) %>% ungroup()
+
+tabla_accionistas_slim <- tabla_accionistas_slim %>% filter(empresa_principal_pais != "Mexico")
+
+if(nrow(tabla_accionistas_slim) == 0){
+  cat("No hay empresas no mexicanas en donde accionistas con la palabra Slim estén presentes")
+}
+
+#graficosPunto4$graph[[3]] <- ggplot(tabla_accionistas_slim, aes(x = empresa_principal_valor_total, y = value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) + 
+  #geom_point() +
+  #labs(title="Diagrama de dispersión de accionistas vinculados a Slim",
+  #     x="valor total de la empresa", y="valor relativo de las acciones", colour="industria") +
+  #theme_minimal() +
+  #theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  #theme(axis.text.y = element_text(size = 6))
+
+```
+
+### 4.7 Comportamiento del Grupo Luksic como multilatina: Colocar en un diagrama de dispersión las empresas no chilenas donde Luksic es inversor, en el eje de las “y” el porcentaje de propiedad y la cantidad de inversión en el eje de las “x”, con las bolitas por país con color o símbolo diferentes (gráfico d8). Tener en cuenta la recursividad, quizás en una empresa no es Luksic quien invierte, pero sí una de las empresas que posee (con recursividad podría ser el gráfico d9).
+  
+```{r }
+
+tabla_accionistas_luksic <- lista_empresas_principales$empresasAccionistasFiltrado("investor_name","luksic")
+tabla_accionistas_luksic <- tabla_accionistas_luksic %>% group_by(investor_name) %>% mutate(value_per=round(100*value/empresa_principal_valor_total,2)) %>% ungroup()
+
+tabla_accionistas_luksic <- tabla_accionistas_luksic %>% filter(empresa_principal_pais != "Chile")
+
+if(nrow(tabla_accionistas_luksic) == 0){
+  cat("No hay empresas no chilenas en donde accionistas con la palabra Lucksic estén presentes")
+}
+
+graficosPunto4$graph[[3]] <- ggplot(tabla_accionistas_luksic, aes(x = empresa_principal_valor_total, y = value_per, group = empresa_principal_industria, colour = empresa_principal_industria)) + 
+  geom_point() +
+  labs(title="Diagrama de dispersión de accionistas en empresas no chilenas vinculados a Luksic",
+      x="valor total de la empresa", y="valor relativo de las acciones", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosPunto4$graph[[3]]
+```
+
+### 4.8 Ver el grado de extranjerización de las empresas mexicanas. Colocar en un diagrama de dispersión todas las empresas con sede en México, en el eje de las “y” el porcentaje de propiedad “no mexicana” y la cantidad de inversión en el eje de las “x” (gráfico d10).
+
+```{r }
+
+tabla_empresas_mexico <- lista_empresas_mexico$entidadesAccionistasTabulado()
+
+tabla_empresas_mexico <- tabla_empresas_mexico %>% group_by(empresa_principal) %>% mutate(prop_no_mexico = sum(value[country_region != "Mexico"], na.rm = TRUE)) %>% ungroup()
+
+tabla_empresas_mexico <- tabla_empresas_mexico %>% group_by(empresa_principal) %>% summarise(empresa_principal_valor_total = sum(empresa_principal_valor_total/n()), prop_no_mexico = sum(prop_no_mexico)/n(), empresa_principal_industria=paste(unique(empresa_principal_industria)), .groups = "drop")
+
+tabla_empresas_mexico <- tabla_empresas_mexico %>% mutate(prop_no_mexico_per = round(100*prop_no_mexico/empresa_principal_valor_total,2))
+
+graficosPunto4$graph[[4]] <- ggplot(tabla_empresas_mexico, aes(x = empresa_principal_valor_total, y = prop_no_mexico_per, group = empresa_principal_industria, colour = empresa_principal_industria)) + 
+  geom_point() +
+  labs(title="Diagrama de dispersión de las empresas mexicanas",
+      x="valor total de la empresa", y="valor relativo de los accionistas no mexicanos", colour="industria") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6)) +
+  theme(legend.position = "none")
+
+graficosPunto4$graph[[4]]
+```
+
+# 5. Nuevas preguntas sobre accionistas.
+
+## 5.1. Listar todas las 327 empresas y ordenarlas según la cantidad de propiedad extranjera de cada una en porcentaje relativo de ésta, listando las empresas en este orden, y ubicando su nombre, país de la sede, Industry de la empresa, la cantidad de propiedad extranjera neta y porcentual (tabla a1).
+
+```{r}
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado() %>% mutate(foreign_value = ifelse(country_region != empresa_principal_pais, value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_foreign_value = sum(foreign_value, na.rm = TRUE)) %>% arrange(desc(total_foreign_value))
+
+tabla_2$total_foreign_value_per <- round(100*tabla_2$total_foreign_value/tabla_2$total_value,2)
+
+tabla_2_numbers <- tabla_2 %>% mutate(total_value = number(total_value,  accuracy = 0.01, big.mark = ","),total_foreign_value = number(total_foreign_value,  accuracy = 0.01, big.mark = ","),total_foreign_value_per = number(total_foreign_value_per,  accuracy = 0.01, big.mark = ","))
+
+cat("<h3>Lista de tablas con el capital de inversores extranjeros</h3>\n")
+tabla_2_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "200px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.2. Sacar un gráfico total por país en el que aparezca la cantidad neta de inversión extranjera y los países de procedencia (enfatizar los colores para que los latinoamericanos tengan una gama y USA otro color, los europeos otro y los del resto del mundo otro (gráfico a2). Opción de que sea una tabla si es más sencillo.
+
+```{r}
+graficosPunto5 <- tibble(indice=1:30, graph = list(30))
+paises_latinoamerica <- c("Argentina", "Peru", "Panama","Costa Rica","Paraguay","Uruguay","Colombia","Chile","Brazil","Bolivia","Mexico","Puerto Rico")
+paises_norte_global <- c("Australia","Finland","South Korea", "Greece","France","Norway","Spain","Switzerland","Denmark","Japan","Canada","Austria","Italy","Portugal","Belgium","Czech Republic","New Zealand","United Kingdom","Germany","Sweden","Iceland","Slovenia","Lithuania")
+paises_usa_afines <- c("United States")
+paraisos_fiscales <- paraisos_fiscales <- c("Luxembourg", "Cayman Islands", "Ireland", "Switzerland", "Bermuda", "Hong Kong", "Jersey", "Netherlands", "Singapore", "British Virgin Islands", "Bahamas","Guernsey","Liechtenstein","Malta","Monaco","Cyprus","Andorra","Fiji")
+otros_paises <- c("Singapore", "Poland", "China (Mainland)","Sri Lanka","Thailand","Qatar","South Africa","India","Israel","Cambodia","United Arab Emirates","Saudi Arabia","Mauritius","Turkey","Russia","Taiwan","Morocco","Kuwait","Malaysia")
+
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+
+tabla_1$pais_color[tabla_1$country_region %in% paises_latinoamerica] <- "países América Latina"
+tabla_1$pais_color[tabla_1$country_region %in% paises_norte_global] <- "países Norte Global"
+tabla_1$pais_color[tabla_1$country_region %in% paises_usa_afines] <- "USA"
+tabla_1$pais_color[tabla_1$country_region %in% paraisos_fiscales] <- "paraísos fiscales"
+tabla_1$pais_color[tabla_1$country_region %in% otros_paises] <- "otros_paises"
+
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal_pais) %>% 
+  summarise(total_value = sum(value, na.rm = TRUE), total_foreign_value = sum(value[country_region == empresa_principal_pais], na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(total_foreign_value))
+
+tabla_2$total_foreign_value_per <- round(100*tabla_2$total_foreign_value/tabla_2$total_value,2)
+
+tabla_2_numbers <- tabla_2 %>% mutate(total_value = number(total_value, accuracy = 0.01, big.mark = ","),
+                              total_foreign_value = number(total_foreign_value, accuracy = 0.01, big.mark = ","),
+                              total_foreign_value_per = number(total_foreign_value_per, accuracy = 0.01, big.mark = ",")
+                              )
+graficosPunto5$graph[[1]] <- ggplot(tabla_1 %>% arrange(empresa_principal_pais,pais_color, desc(value)) %>% filter(value != 0), aes(x=empresa_principal_pais, y=value, fill = pais_color)) +
+  geom_bar(stat="identity", position = "stack") +
+  labs(title="Composición por países de inversiones por país",
+      x="país", y="valor de las inversiones", colour="países de origen") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[1]]
+```
+
+## 5.3. Listar por países la cantidad neta de inversión según cada Investor Type (columa I de las tablas de Shareholder, que salvo que haya alguna categoría más que no hayamos visto se desagrega en Individual Investor, Corporation, Investment Advisor, Hedge Fund, Sovereign Wealth Fund, Pension Fund, Bank and Trust, Venture Capital, Insurance Company, Other Insider Investor), realizando un gráfico con la cantidad total de cada tipo en columnas por país (gráfico a3). En ocasiones, estas categorías vienen mezcladas, y un Investment Advisor viene con un /Hedge Fund. En ese caso, las combinaciones se pueden considerar una nueva categoría Investment Advisor/Hedge Fund.
+
+```{r}
+
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+
+graficosPunto5$graph[[2]] <- ggplot(tabla_1 %>% arrange(empresa_principal_pais,investor_subtype, desc(value)) %>% filter(value != 0), aes(x=empresa_principal_pais, y=value, fill = investor_subtype)) +
+  geom_bar(stat="identity", position = "stack") +
+  labs(title="Subtipos de inversores por país",
+      x="país", y="valor de las inversiones", colour="subtipos de inversores") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[2]]
+
+```
+
+## 5.4. Lo mismo, si se puede generar una gráfica igual de porcentajes de inversión en cada país con cada una de las categorías anteriores (como hicimos con BlackRock) (gráfico a4).
+
+```{r}
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+
+tabla_1 <- tabla_1 %>% filter (!is.na(investor_subtype)) %>% 
+    group_by(empresa_principal_pais) %>% 
+    mutate(value_per = round(100*value/sum(value, na.rm = TRUE),8)) %>% 
+    ungroup()
+
+graficosPunto5$graph[[3]] <- ggplot(tabla_1 %>% arrange(empresa_principal_pais,investor_subtype, desc(value_per)) %>% filter(value != 0), aes(x=empresa_principal_pais, y=value_per, fill = investor_subtype)) +
+  geom_bar(stat="identity", position = "stack") +
+  labs(title="Subtipos de inversores por país, valor relativo",
+      x="país", y="valor relativo de las inversiones", colour="subtipos de inversores") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[3]]
+
+```
+
+## 5.5. Ubicar los 30 mayores cambios netos de propiedad en el periodo de cambio que tenemos (columna E, Position Change), listando la cantidad de variación, el shareholder que lo protagoniza y la empresa donde se produce el cambio (gráfico a5).
+
+```{r}
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+
+tabla_1 <- tabla_1 %>% arrange(desc(abs(position_change))) %>% 
+            select(investor_name, empresa_principal, position_change) %>% 
+            head(30)
+
+tabla_1_numbers <- tabla_1 %>% mutate(position_change = number(position_change, accuracy = 0.01, big.mark = ","))
+
+cat("<h3>Principales cambios de posición de los accionistas</h3>\n")
+tabla_1_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "200px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.6. Listar las empresas con sede en Chile y México que tienen un poseedor mayoritario extranjero, ubicando el nombre de las empresas, el país en el que tiene sede, el capital total de la empresa, el poseedor mayoritario, el capital total de este poseedor y el porcentaje (tabla a6).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_mexico_brasil <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_brasil$entidadesAccionistasTabulado() %>% arrange(empresa_principal, desc(value)) %>% select(empresa_principal, empresa_principal_pais, investor_name, country_region, value)
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% 
+            mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2)) %>% 
+            slice(1) %>% 
+            ungroup() %>%
+            filter(empresa_principal_pais != country_region)
+
+
+
+tabla_2_numbers <- tabla_2 %>% mutate(value = number(value, accuracy = 0.01, big.mark = ","), value_per = number(value_per, accuracy = 0.01, big.mark = ","))
+
+tabla_a6 <- unique(tabla_2$empresa_principal)
+
+cat("<h3>Principal accionista extranjero mayoritario de las empresas chilenas y mexicanas</h3>\n")
+tabla_2_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.7. Listar las empresas con sede en Chile y México que tienen poseedores extranjeros con el 10% o más, aunque no sea el mayoritario, ubicando el nombre de las empresas, el país en el que tiene sede, el capital total de la empresa, los poseedores extranjeros mayores al 10%, el capital total de estos poseedores y su porcentaje (tabla a7).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+
+lista_empresas_mexico_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado() %>% arrange(empresa_principal, desc(value)) %>% select(empresa_principal, empresa_principal_pais, investor_name, country_region, value)
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% 
+            mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2)) %>% 
+            ungroup() %>%
+            filter(empresa_principal_pais != country_region & value_per >= 10)
+
+tabla_a7 <- unique(tabla_2$empresa_principal)
+
+tabla_2_numbers <- tabla_2 %>% mutate(value = number(value, accuracy = 0.01, big.mark = ","), value_per = number(value_per, accuracy = 0.01, big.mark = ","))
+
+cat("<h3>Accionistas extranjeros con más del 10% de oarticipación de las empresas chilenas y mexicanas</h3>\n")
+tabla_2_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+```
+
+## 5.8. Listar las empresas con sede en Chile y México cuyos mayores poseedores extranjeros suman al menos 20% con hasta 10 poseedores, ubicando el nombre de las empresas, el país en el que tiene sede, el capital total de la empresa, los hasta 10 poseedores extranjeros que suman al menos el 20%, el capital total de estos poseedores y su porcentaje (tabla a8).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_mexico_brasil <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_brasil$entidadesAccionistasTabulado() %>% arrange(empresa_principal, desc(value)) %>% select(empresa_principal, empresa_principal_pais, investor_name, country_region, value)
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% 
+            mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2)) %>% 
+            arrange(empresa_principal, desc(value_per)) %>%
+            filter(empresa_principal_pais != country_region) %>%
+            slice(1:10) %>%
+            ungroup()
+
+tabla_3 <- tabla_2 %>% group_by(empresa_principal) %>% 
+            summarise(total_foreign_value_per = sum(value_per, na.rm = TRUE), .groups = "drop") %>%
+            filter(total_foreign_value_per >= 20)
+
+empresas_20_10 <- tabla_3$empresa_principal
+
+tabla_4 <- tabla_2 %>% filter(empresa_principal %in% empresas_20_10)
+
+tabla_a8 <- unique(tabla_4$empresa_principal)
+
+tabla_4_numbers <- tabla_4 %>% mutate(value = number(value, accuracy = 0.01, big.mark = ","), value_per = number(value_per, accuracy = 0.01, big.mark = ","))
+
+tabla_3_numbers <- tabla_3 %>% mutate(total_foreign_value_per = number(total_foreign_value_per, accuracy = 0.01, big.mark = ","))
+
+
+cat("<h3> Diez accionistas extranjeros de empresas chilenas y mexicanas que suman más del 20% del capital</h3>\n")
+tabla_4_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+cat("<h3> Empresas chilenas y mexicanas cuyos 10 principales accionistas extranjeros suman más del 20% del capital</h3>\n")
+tabla_3_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+```
+
+## 5.9. Listar las empresas con sede en Chile y México que tienen al menos 1 poseedor extranjero que sí supera el 1% pero no supera el 10%, ubicando el nombre de las empresas, el país en el que tiene sede, el capital total de la empresa, los poseedores extranjeros mayores entre el 1 y 10%, el capital total de estos poseedores y su porcentaje (tabla a9).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_mexico_brasil <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_brasil$entidadesAccionistasTabulado() %>% arrange(empresa_principal, desc(value)) %>% select(empresa_principal, empresa_principal_pais, investor_name, country_region, value)
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% 
+            mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2)) %>% 
+            arrange(empresa_principal, desc(value_per)) %>%
+            filter(empresa_principal_pais != country_region & value_per >= 1 & value_per <= 10) %>%
+            ungroup()
+
+tabla_a9 <- unique(tabla_2$empresa_principal)
+
+tabla_2_numbers <- tabla_2 %>% mutate(value = number(value, accuracy = 0.01, big.mark = ","), value_per = number(value_per, accuracy = 0.01, big.mark = ","))
+
+cat("<h3> Empresas chilenas y mexicanas con accionistas extranjeros poseedores entre el 1% y el 10% del capital</h3>\n")
+tabla_2_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.10. Listar las empresas con sede en Chile y México que tienen más de 20 poseedores extranjeros con entre el 0,5 y el 1%, ubicando el nombre de las empresas, el país en el que tiene sede, el capital total de la empresa (esta vez sin listar los poseedores) (tabla a10).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_mexico_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado() %>% arrange(empresa_principal, desc(value)) %>% select(empresa_principal, empresa_principal_pais, investor_name, country_region, value)
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% 
+            mutate(value_per = round(100*value/sum(value, na.rm = TRUE),2)) %>% 
+            arrange(empresa_principal, desc(value_per)) %>%
+            filter(empresa_principal_pais != country_region & value_per >= 0.5 & value_per <= 1) %>%
+            ungroup()
+
+tabla_3 <- tabla_2 %>% group_by(empresa_principal) %>% 
+            summarise(total_accionistas = n(), .groups = "drop") %>%
+            filter(total_accionistas >= 20)
+
+empresas_pequenos_20 <- tabla_3$empresa_principal
+
+tabla_4 <- tabla_2 %>% filter(empresa_principal %in% empresas_pequenos_20)
+
+tabla_a10 <- unique(tabla_4$empresa_principal)
+
+
+tabla_4_numbers <- tabla_4 %>% mutate(value = number(value, accuracy = 0.01, big.mark = ","), value_per = number(value_per, accuracy = 0.01, big.mark = ","))
+
+cat("<h3> Accionistas extranjeros de empresas chilenas y mexicanas entre el 0,5% y el 1% en los que son más de 20 en total</h3>\n")
+tabla_4_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+cat("<h3> Empresas chilenas y mexicanas cuyos con más de 20 accionistas extranjeros entre el 0,5% y el 1% del capital</h3>\n")
+tabla_3_numbers %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+```
+
+## 5.11. Listar las empresas con sede en Chile y México que han aparecido en los 5 listados anteriores (a6-a10), haciendo check en cuáles de esos listados han aparecido (tabla a11).
+
+Sólo el Grupo Financiero Banorte SAB de CV a la luz del resultado anterior, pero acá está la matriz de comprobación, por si interesa jugar con los parámetros.
+
+```{r}
+
+empresas <- unique(c(tabla_a6, tabla_a7, tabla_a8, tabla_a9, tabla_a10))
+
+matriz_comprobacion <- tibble(empresas=empresas, 
+                              a6=rep("no", length(empresas)), 
+                              a7=rep("no", length(empresas)),
+                              a8=rep("no", length(empresas)),
+                              a9=rep("no", length(empresas)),
+                              a10=rep("no", length(empresas))
+                              )
+matriz_comprobacion$a6[matriz_comprobacion$empresas %in% tabla_a6] <- "si"
+matriz_comprobacion$a7[matriz_comprobacion$empresas %in% tabla_a7] <- "si"
+matriz_comprobacion$a8[matriz_comprobacion$empresas %in% tabla_a8] <- "si"
+matriz_comprobacion$a9[matriz_comprobacion$empresas %in% tabla_a9] <- "si"
+matriz_comprobacion$a10[matriz_comprobacion$empresas %in% tabla_a10] <- "si"
+
+cat("<h3> Matriz de comprobación </h3>\n")
+matriz_comprobacion %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.12. Lista las empresas del conjunto de 327 empresas, cuya propiedad nacional supera el 90% del total, ubicando nombre de la empresa, capital total y porcentaje nacional (tabla a12).
+
+```{r}
+
+tabla_1 <- lista_empresas_principales$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+
+tabla_1 <- tabla_1[,c("empresa_principal","empresa_principal_pais","country_region","value","cap_nacional")]
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_nacional = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_nacional_per = round(100*total_cap_nacional/total_value,2)) %>%
+            arrange(desc(total_cap_nacional_per))
+
+cat("<h3> Empresas por capital total y capital nacional </h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.13. Para las empresas con sede en Chile y México, sacar un gráfico para cada uno de los sectores económicos de la empresa matriz (Industry reclasificadas), donde aparezca por cada una de los sectores una barra de Chile y otra de México del porcentaje extranjero del total de las empresas (gráfico a13).
+
+```{r}
+
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_mexico_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal_pais) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_nacional = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% mutate(total_cap_nacional_per = round(100*total_cap_nacional/total_value,2))
+
+graficosPunto5$graph[[4]] <- ggplot(tabla_2, aes(x = empresa_principal_pais, y = 100-total_cap_nacional_per)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title="Porcentaje de propiedad extranjera de empresas mexicanas y chilenas",
+      x="país", y="porcentaje") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[4]]
+
+```
+
+## 5.14. Para las empresas con sede en Chile, ordenarlas por inversión neta extranjera ubicando su nombre, cantidad de dólares de inversores extranjeros y el porcentaje que supone (tabla a14).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_extranjero = ifelse(empresa_principal_pais != country_region, value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_extranjero = sum(cap_extranjero, na.rm = TRUE), .groups = "drop")
+
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_extranjero_per = round(100*total_cap_extranjero/total_value,2)) %>%
+            arrange(desc(total_cap_extranjero_per))
+
+cat("<h3> Empresas chilenas por porcentaje de capital extranjero</h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+```
+
+## 5.15. Listar todos los inversores extranjeros en empresas de Chile por orden de su inversión total en Chile, ubicando su nombre, cantidad de dólares invertidos en Chile, su tipología de inversor y las empresas en las que está presente (tabla a15).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado() %>% 
+            filter(country_region != empresa_principal_pais) %>%
+            group_by(investor_name) %>%
+            summarise(total_value = sum(value, na.rm = TRUE), country_region = unique(country_region), total_empresa_principal = paste(unique(empresa_principal), collapse = ", ")) %>%
+            arrange(desc(total_value)) %>%
+            select(investor_name, country_region, total_empresa_principal, total_value)
+
+cat("<h3> Inversores en empresas chilenas por porcentaje de capital invertido</h3>\n")
+tabla_1 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+
+## 5.16. Calcular el porcentaje de inversión nacional de los grupos de Chile y México, quitando al primer poseedor nacional, ubicando nombre de la empresa, porcentaje de propiedad nacional y la cantidad neta (tabla a16).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_mexico_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+tabla_1 <- tabla_1[,c("investor_name","empresa_principal","empresa_principal_pais","country_region","value","cap_nacional")]
+
+tabla_1 <- tabla_1 %>% group_by(empresa_principal) %>%
+              mutate(total_value = sum(value, na.rm = TRUE)) %>%
+              arrange(desc(cap_nacional)) %>% 
+              slice(-1) %>% 
+              ungroup()
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(total_value, na.rm = TRUE)/n(), total_cap_nacional = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_nacional_per = round(100*total_cap_nacional/total_value,4)) %>%
+            arrange(desc(total_cap_nacional_per))
+
+cat("<h3> Empresas por capital total y capital nacional </h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+
+
+```
+
+
+## 5.17. Listar las 10 empresas con más capital total de México y las 10 de Chile, y poner primero el porcentaje total de propiedad nacional, y después el porcentaje total de propiedad nacional quitando al mayor poseedor (tabla a17).
+
+```{r}
+lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("Mexico")
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_mexico_chile <- ListaEntidades$new("lista_empresas_mexico_chile", c(lista_empresas_mexico$empresas, lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+tabla_1 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(empresa_principal_pais = unique(empresa_principal_pais), total_value = sum(value, na.rm = TRUE), total_cap_nacional_1 = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+tabla_1 <- tabla_1 %>% 
+            mutate(total_cap_nacional_1_per = round(100*total_cap_nacional_1/total_value,2)) %>%
+            arrange(desc(total_cap_nacional_1_per))
+
+tabla_2 <- lista_empresas_mexico_chile$entidadesAccionistasTabulado()
+tabla_2 <- tabla_2 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+tabla_2 <- tabla_2 %>% group_by(empresa_principal) %>% arrange(desc(cap_nacional)) %>% slice(-1) %>% ungroup()
+tabla_2 <- tabla_2 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_nacional_2 = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_nacional_2_per = round(100*total_cap_nacional_2/total_value,2)) %>%
+            arrange(desc(total_cap_nacional_2_per))
+
+tabla_3 <- inner_join(tabla_1[,c("empresa_principal","empresa_principal_pais","total_value","total_cap_nacional_1","total_cap_nacional_1_per")],
+                      tabla_2[,c("empresa_principal","total_cap_nacional_2","total_cap_nacional_2_per")],
+                      by = "empresa_principal")
+
+tabla_3 <- tabla_3 %>% group_by(empresa_principal_pais) %>% arrange(desc(total_value)) %>% slice(1:10) %>% ungroup()
+
+cat("<h3> Empresas mexicanas y chilenas según propiedad nacional de primer y segundo orden </h3>\n")
+tabla_3 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.18. Listar de mayor a menor las empresas con sede en Chile donde es más fuerte la inversión nacional chilena en términos netos, y ubica su nombre, cantidad de inversión chilena y porcentaje de la inversión chilena (tabla a18).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_nacional = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% mutate(total_cap_nacional_per = round(100*total_cap_nacional/total_value,2)) %>%
+            arrange(desc(total_cap_nacional))
+
+cat("<h3> Empresas chilenas por inversión nacional neta </h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.19. Listar de mayor a menor las empresas chilenas donde es más fuerte la inversión chilena en términos porcentuales, y ubica su nombre, cantidad de inversión chilena y porcentaje de la inversión chilena (tabla a19).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_nacional = ifelse(empresa_principal_pais == country_region, value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(total_value = sum(value, na.rm = TRUE), total_cap_nacional = sum(cap_nacional, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% mutate(total_cap_nacional_per = round(100*total_cap_nacional/total_value,2)) %>%
+            arrange(desc(total_cap_nacional_per))
+
+cat("<h3> Empresas chilenas por inversión nacional porcentual </h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.20. Listar de mayor a menor las empresas chilenas donde es más fuerte la inversión de Pension Fund (cualquiera sea su procedencia) en términos absolutos, ubicando su nombre, cantidad total de inversión de Pension Fund y el porcentaje de la inversión (tabla a20).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds = ifelse(investor_subtype == "Pension Fund", value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(investor_name = paste(unique(investor_name), sep = ", "), total_value = sum(value, na.rm = TRUE), total_cap_pension_funds = sum(cap_pension_funds, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_pension_funds_per = round(100*total_cap_pension_funds/total_value,2)) %>%
+            arrange(desc(total_cap_pension_funds))
+
+cat("<h3> Empresas chilenas por inversión de fondos de pensiones en términos netos</h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.21. Listar de mayor a menor las empresas chilenas donde es más fuerte la inversión de Pension Fund (cualquiera sea su procedencia) en términos porcentuales, ubicando su nombre, cantidad total de inversión de Pension Fund y el porcentaje de la inversión (tabla a21).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds = ifelse(investor_subtype == "Pension Fund", value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(investor_name = paste(unique(investor_name), sep = ", "), total_value = sum(value, na.rm = TRUE), total_cap_pension_funds = sum(cap_pension_funds, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_pension_funds_per = round(100*total_cap_pension_funds/total_value,2)) %>%
+            arrange(desc(total_cap_pension_funds_per))
+
+cat("<h3> Empresas chilenas por inversión de fondos de pensiones en términos porcentuales</h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+```
+
+## 5.22. Listar de mayor a menor las empresas chilenas donde es más fuerte la inversión de Pension Fund con sede en Chile en términos absolutos, ubicando su nombre, cantidad total de inversión de Pension Fund y el porcentaje de la inversión, así como las empresas donde está presente (tabla a22).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds_nacional = ifelse((investor_subtype == "Pension Fund")&(country_region == empresa_principal_pais), value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal) %>% summarise(investor_name = paste(unique(investor_name), sep = ", "), total_value = sum(value, na.rm = TRUE), total_cap_pension_funds_nacional = sum(cap_pension_funds_nacional, na.rm = TRUE), .groups = "drop")
+tabla_2 <- tabla_2 %>% 
+            mutate(total_cap_pension_funds_nacional_per = round(100*total_cap_pension_funds_nacional/total_value,2)) %>%
+            arrange(desc(total_cap_pension_funds_nacional))
+            
+
+cat("<h3> Empresas chilenas por inversión de fondos de pensiones chilenos en términos netos</h3>\n")
+tabla_2 %>% 
+  kbl() %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = "100%", height = "600px")
+cat("<br>")  # Espacio entre tablas
+
+```
+
+## 5.23. Poner en un gráfico la cantidad y el porcentaje relativo total de los Pension Fund en la propiedad de empresas chilenas, y de forma diferenciada por fondos de pensión chileno y extranjero, también en cantidad y porcentaje relativo cada uno (6 barras en total) (gráfico a23).
+
+```{r}
+lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("Chile")
+lista_empresas_antofagasta <- lista_empresas_principales$extraeEntidadesNombre("Antofagasta PLC")
+lista_empresas_antofagasta$empresas[[1]]$country_region <- "Chile"
+lista_empresas_chile <- ListaEntidades$new("lista_empresas_chile", c(lista_empresas_chile$empresas, lista_empresas_antofagasta$empresas))
+
+tabla_1 <- lista_empresas_chile$entidadesAccionistasTabulado()
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds = ifelse(investor_subtype == "Pension Fund", value, 0))
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds_nacional = ifelse((investor_subtype == "Pension Fund")&(country_region == empresa_principal_pais), value, 0))
+tabla_1 <- tabla_1 %>% mutate(cap_pension_funds_extranjero = ifelse((investor_subtype == "Pension Fund")&(country_region != empresa_principal_pais), value, 0))
+
+tabla_2 <- tabla_1 %>% group_by(empresa_principal_pais) %>% summarise(total_value = sum(value, na.rm = TRUE),
+                                total_cap_pension_funds = sum(cap_pension_funds, na.rm = TRUE), 
+                                total_cap_pension_funds_nacional = sum(cap_pension_funds_nacional, na.rm = TRUE), 
+                                total_cap_pension_funds_extranjero = sum(cap_pension_funds_extranjero, na.rm = TRUE), 
+                                .groups = "drop")
+tabla_2 <- tabla_2 %>% 
+            mutate(
+              total_cap_pension_funds_per = round(100*total_cap_pension_funds/total_value,2),
+              total_cap_pension_funds_nacional_per = round(100*total_cap_pension_funds_nacional/total_cap_pension_funds,2),
+              total_cap_pension_funds_extranjero_per = round(100*total_cap_pension_funds_extranjero/total_cap_pension_funds,2),
+            ) %>%
+            arrange(desc(total_cap_pension_funds_nacional))
+            
+tabla_3 <- tabla_2 %>%
+            select(empresa_principal_pais, total_value, total_cap_pension_funds, total_cap_pension_funds_nacional, total_cap_pension_funds_extranjero) %>%
+            pivot_longer(cols = c(total_value, total_cap_pension_funds, total_cap_pension_funds_nacional, total_cap_pension_funds_extranjero),
+                                    names_to = "tipo",
+                                    values_to = "valor")
+
+tabla_4 <- tabla_2 %>% 
+            select(empresa_principal_pais, total_cap_pension_funds_per, total_cap_pension_funds_nacional_per, total_cap_pension_funds_extranjero_per) %>%
+            pivot_longer(cols = c(total_cap_pension_funds_per, total_cap_pension_funds_nacional_per, total_cap_pension_funds_extranjero_per),
+                                    names_to = "tipo",
+                                    values_to = "valor_per")
+
+graficosPunto5$graph[[5]] <- ggplot(tabla_3, aes(x = empresa_principal_pais, y = valor, fill = tipo)) +
+                              geom_bar(stat = "identity", position = "dodge") +
+                              labs(title="Valores netos de inversión de los Pension Funds en Chile",
+                                x="país", y="valor", fill = "tipo") +
+                              theme_minimal() +
+                              theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+                              theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[6]] <- ggplot(tabla_4, aes(x = empresa_principal_pais, y = valor_per, fill = tipo)) +
+                              geom_bar(stat = "identity", position = "dodge") +
+                              labs(title="Valores porcentuales de inversión de los Pension Funds en Chile",
+                                x="país", y="porcentaje") +
+                              theme_minimal() +
+                              theme(axis.text.x = element_text(size= 6, angle = 45, hjust = 1)) +
+                              theme(axis.text.y = element_text(size = 6))
+
+graficosPunto5$graph[[5]]
+graficosPunto5$graph[[6]]
+
+```
+
+
+
+
+
+
+
