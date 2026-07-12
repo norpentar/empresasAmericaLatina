@@ -1,3 +1,7 @@
 export/
 tablas_input/
 .Rproj.user
+.Rhistory
+.RData
+.Rproj.user/
+scripts/test.R

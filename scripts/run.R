@@ -1,9 +1,9 @@
-source("./clases_objetos.R")
-source("./auxiliares.R")
-source("./shareholders.R")
-source("./treeStructure.R")
-source("./financials.R")
-source("./familias.R")
+source("./scripts/clases_objetos.R")
+source("./scripts/auxiliares.R")
+source("./scripts/shareholders.R")
+source("./scripts/treeStructure.R")
+source("./scripts/financials.R")
+source("./scripts/familias.R")
 
 
 shareholders <- cargaShareholdersArray()

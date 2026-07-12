@@ -580,8 +580,9 @@ Empresa <- R6Class("Empresa",
       tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
       private$.financials$valor_ajustado <- private$.financials$valor
       for (i in 1:nrow(private$.financials)){
-        private$.financials$valor_ajustado[i] <- round(as.numeric(private$.financials$valor[i]*tabla_monedas[1,colnames(tabla_monedas)==anho_base]/(tabla_monedas[tabla_monedas$monedas==private$.currency,colnames(tabla_monedas)==private$.financials$anho[i]]*tabla_monedas[1,colnames(tabla_monedas)==private$.financials$anho[i]])),2)
-      }
+        private$.financials$valor_ajustado[i] <- round((as.numeric(private$.financials$valor[i])*as.numeric(tabla_monedas[1,colnames(tabla_monedas)==anho_base]))/(as.numeric(tabla_monedas[tabla_monedas$monedas==private$.currency,colnames(tabla_monedas)==private$.financials$anho[i]])*as.numeric(tabla_monedas[1,colnames(tabla_monedas)==private$.financials$anho[i]])),2)
+        
+        }
       invisible(self)
     },
     ajustaTreeStructure = function(anho_base = "2023", anho_recoleccion = "2023"){

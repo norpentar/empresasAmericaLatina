@@ -11,6 +11,7 @@ library(dplyr)
 library(visNetwork)
 library(bolt4jr)
 library(reticulate)
+library(here)
 
 use_virtualenv("~/.venvs/neo4j_env", required = TRUE)
 
@@ -35,14 +36,17 @@ tabla <- lista_empresas_principales$tablaFinancialsEmpresas() %>% select(-valor_
 
 for (var in unique(tabla$variable)){
   tabla_aux <- tabla %>% filter(variable==var)
-  write.csv(tabla_aux, file = paste("./export/tablas/financials/variables/currency_nacional/tabla_variables_",var,"_currency_nacional.csv",sep=""))
+  var <- gsub(" ", "_", var)
+  ruta <- here("export","tablas","financials","variables","currency_nacional",paste("tabla_variables_",var,"_currency_nacional.csv",sep=""))
+  write.csv(tabla_aux, file = ruta)
 }
 
 tabla <- lista_empresas_principales$tablaFinancialsEmpresas() %>% select(-valor) %>% pivot_wider(names_from = anho, values_from = valor_ajustado)
 
 for (var in unique(tabla$variable)){
   tabla_aux <- tabla %>% filter(variable==var)
-  write.csv(tabla_aux, file = paste("./export/tablas/financials/variables/usd_1990/tabla_variables_",var,"_usd_1990.csv",sep=""))
+  ruta <- here("export","tablas","financials","variables","usd_2023",paste("tabla_variables_",var,"_usd_2023.csv",sep=""))
+  write.csv(tabla_aux, file = ruta)
 }
 ```
 

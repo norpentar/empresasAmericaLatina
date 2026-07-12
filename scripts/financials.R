@@ -139,7 +139,6 @@ cargaFinancialsIncomeStatement <- function(ruta_income_statement_excel="./tablas
   lista_formato <- detectaFormatoTabla(income_statement_excel)
   income_statement_excel <- lista_formato[[1]]
   nombre_empresa <- lista_formato[[2]]
-  #if(nombre_empresa == "Centrais Eletricas Brasileiras 3 13 23"){stop(paste("El archivo con el nombre malo es ",ruta_income_statement_excel, sep = ""))}
   datos_fechas <- lista_formato[[3]]
   formato <- lista_formato[[4]]
   #extraigo las variables
