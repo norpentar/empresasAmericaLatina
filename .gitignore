@@ -5,3 +5,4 @@ tablas_input/
 .RData
 .Rproj.user/
 scripts/test.R
+logs/

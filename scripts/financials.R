@@ -12,11 +12,13 @@ library(ggplot2)
 library(cowplot)
 library(ggpubr)
 library(stringr)
-
+library(purrr)
 
 
 #Funciones auxiliares específicas
 detectaFormatoTabla <- function(tabla_in){
+  msg <- glue::glue("Entrando en la función financials/detectaFormatoTabla")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   tabla <- tabla_in
   nombre_empresa <- NA
   datos_fechas <- NA
@@ -45,17 +47,56 @@ detectaFormatoTabla <- function(tabla_in){
   } else {
     stop(paste("Formato no encontrado"))
   }
+  currency_archivo <- extraeCurrencyArchivo(tabla_in)
+  msg <- glue::glue("Parámetros procesados en la función detectaFormatoTablas - nombre_empresa: {nombre_empresa}; formato: {formato}; currency_archivo: {currency_archivo}")
+  log_debug_multi(msg, namespaces = c("financials"))
+  return(list(tabla, nombre_empresa, datos_fechas, formato, currency_archivo))
+}
+
+extraeCurrencyArchivo <- function(tabla){
+  msg <- glue::glue("Entrando en la función financials/extraeCurrencyArchivo")
+  log_trace_multi(msg, namespaces = c("global", "financials"))
+  currency_archivo <- list()
+  if (tabla[1,1] == "Company Name"){
+    currency_archivo <- append(currency_archivo, tabla[tabla[[1]] == "Standardized Currency",2])
+  } else{
+    tabla_currency_patterns <- read_excel("./tablas_input/auxiliares/tabla_currency_patterns.xlsx")
+    lista_primera_columna <- unlist(tabla[,1])
+    currency_archivo <- pmap(tabla_currency_patterns, function(pais, currency, currency_pattern){
+      if(length(grep(currency_pattern, lista_primera_columna, ignore.case = TRUE)) > 0){
+        return(currency)
+      } else {
+        return(NULL)
+      }
+    }) %>% compact()  # de purrr, elimina los NULL
+  }
+  if((is.na(currency_archivo)|(is.null(currency_archivo)))){
+    stop("currency archivo no encontrada")
+  }
+  if(length(currency_archivo) > 1) {
+    msg <- paste("Lista de currencies: ", paste(currency_archivo, collapse=","), sep="")
+    log_error_multi(msg, namespaces = c("global", "financials"))
+    
+  }
+  msg <- glue::glue("Parámetros procesados de la función extraeCurrencyArchivo - currency_archivo: {currency_archivo}")
+  log_trace_multi(msg, namespaces = c("financials"))
+  return(currency_archivo[[1]])
   
-  return(list(tabla, nombre_empresa, datos_fechas, formato))
 }
 
 extraeNombreEmpresa <- function(tabla, row_id, col_id, character_delim){
+  msg <- glue::glue("Entrando en la función financials/extraeNombreEmpresa")
+  log_trace_multi(msg, namespaces = c("global", "financials"))
   celda_nombre <- as.character(tabla[row_id, col_id])
   cadena <- paste("\\s*\\", character_delim,".*$", sep = "")
   nombre_empresa <- sub(cadena, "", celda_nombre)
+  msg <- glue::glue("Parámetros procesados de la función extraeNombreEmpresa - nombre_empresa: {nombre_empresa}")
+  log_trace_multi(msg, namespaces = c("financials"))
   return(nombre_empresa)  
 }
 identificaFechas <- function(tabla){
+  msg <- glue::glue("Entrando en la función financials/identificaFechas")
+  log_trace_multi(msg, namespaces = c("global", "financials"))
   # VIVA CHATGPT
   # 1. Localizar fila que contiene varios años (cualquier año >=1900 por ejemplo)
   matches <- apply(tabla, 1, function(x) {
@@ -92,17 +133,17 @@ identificaFechas <- function(tabla){
 }
 
 extraeVariables <- function(nombre_empresa, nombre_variable, tabla, datos_fechas){
-  if(nombre_variable == "Standarized Currency"){
-    currency <- as.character(tabla[12,2])
-    return(currency)
-  } else{
-    num_fila_variable <- max(which(tabla$variables == nombre_variable))
-    anhos_totales <- 1990:2024
-    if(is.infinite(num_fila_variable)){
-      #stop("extraeVariables: variable no encontrada")
+  msg <- glue::glue("Entrando en la función financials/extraeVariables")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
+  
+  num_fila_variable <- max(which(tabla$variables == nombre_variable))
+  anhos_totales <- 1990:2024
+  if(is.infinite(num_fila_variable)){
+      msg <- glue::glue("Función extraeVariables: variable no encontrada")
+      log_debug_multi(msg, namespaces = c("global", "financials"))
       fila_variable <- as.list(rep(NA,length(1990:2024)))
       names(fila_variable) <- anhos_totales
-    } else{
+  } else{
       fila_variable <- tabla[num_fila_variable, datos_fechas$col_max:datos_fechas$col_min]
       anhos <- as.vector(tabla[datos_fechas$fila_anhos, datos_fechas$col_max:datos_fechas$col_min])
       names(fila_variable) <- anhos
@@ -111,14 +152,16 @@ extraeVariables <- function(nombre_empresa, nombre_variable, tabla, datos_fechas
       names(fila_variable_faltan) <- anhos_faltan
       fila_variable <- unlist(c(fila_variable, fila_variable_faltan))
       fila_variable <- fila_variable[order(as.numeric(names(fila_variable)))]
-    }
+  }
     fila_variable <- as.list(c(empresa=nombre_empresa, variable = nombre_variable, fila_variable))
     
     return(fila_variable)
-  }
+  
 }
 
-procesa_valores <- function(tabla_procesada_in){
+procesaValores <- function(tabla_procesada_in){
+  msg <- glue::glue("Entrando en la función financials/procesaValores")
+  log_trace_multi(msg, namespaces = c("global", "financials"))
   tabla_procesada <- tabla_procesada_in
   tabla_procesada$valor[!grepl("\\(", tabla_procesada$valor)] <- gsub("\\,", "", tabla_procesada$valor[!grepl("\\(", tabla_procesada$valor)])
   tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)] <- gsub(",(?=[^,]*$)", ".", tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)], perl = TRUE )
@@ -132,15 +175,17 @@ procesa_valores <- function(tabla_procesada_in){
 #Funciones de carga
 ##Income Statement
 cargaFinancialsIncomeStatement <- function(ruta_income_statement_excel="./tablas_input/Financials/income_statement/012_IncomeStatement_AluarAluminioArgentinoSAIC.xlsx"){
+  msg <- glue::glue("Entrando en la función financials/cargaFinancialsIncomeStatement con el archivo: {ruta_income_statement_excel}")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   #leo la tabla
   income_statement_excel <- read_excel(ruta_income_statement_excel)
-  cat("se cargó el archivo de financials input stament: ",ruta_income_statement_excel,"\n", sep="")
   #detecto el formato de la tabla
   lista_formato <- detectaFormatoTabla(income_statement_excel)
   income_statement_excel <- lista_formato[[1]]
   nombre_empresa <- lista_formato[[2]]
   datos_fechas <- lista_formato[[3]]
   formato <- lista_formato[[4]]
+  currency_archivo <- lista_formato[[5]]
   #extraigo las variables
   if(formato == 1){
     total_revenue <- extraeVariables(nombre_empresa, "Revenue from Business Activities - Total", income_statement_excel, datos_fechas)
@@ -159,25 +204,26 @@ cargaFinancialsIncomeStatement <- function(ruta_income_statement_excel="./tablas
   #junto las variables extraídas
   tabla_procesada <- bind_rows(total_revenue, net_income_after_taxes)
   tabla_procesada <- tabla_procesada %>% pivot_longer(cols=!c(empresa, variable), names_to = "anho", values_to = "valor")
-  tabla_procesada <- procesa_valores(tabla_procesada)
+  tabla_procesada <- procesaValores(tabla_procesada)
   
-  
-  return(tabla_procesada)
+  return(list(tabla_procesada, currency_archivo))
   
   
 }
 
 cargaFinancialsValuation <- function(ruta_valuation_excel="./tablas_input/Financials/valuation/012_Valuation_AluarAluminioArgentinoSAIC.xlsx"){
+  msg <- glue::glue("Entrando en la función financials/cargaFinancialsValuation con el archivo: {ruta_valuation_excel}")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   #leo la tabla
   valuation_excel <- read_excel(ruta_valuation_excel)
-  cat("se cargó el archivo de valuation: ",ruta_valuation_excel,"\n", sep="")
   #detecto el formato de la tabla
   lista_formato <- detectaFormatoTabla(valuation_excel)
   valuation_excel <- lista_formato[[1]]
   nombre_empresa <- lista_formato[[2]]
   datos_fechas <- lista_formato[[3]]
+  formato <- lista_formato[[4]]
+  currency_archivo <- lista_formato[[5]]
   #extraigo variables
-  currency <- extraeVariables(nombre_empresa, "Standarized Currency", valuation_excel, datos_fechas)
   market_capitalization <- extraeVariables(nombre_empresa, "Market Capitalization", valuation_excel, datos_fechas)
   enterprise_value <- extraeVariables(nombre_empresa, "Enterprise Value", valuation_excel, datos_fechas)
   #ajusto nombres
@@ -185,20 +231,24 @@ cargaFinancialsValuation <- function(ruta_valuation_excel="./tablas_input/Financ
   enterprise_value$variable <- "enterprise value"
   #armo la tabla
   tabla_procesada <- bind_rows(market_capitalization, enterprise_value) %>% pivot_longer(cols=!c(empresa, variable), names_to = "anho", values_to = "valor")
-  tabla_procesada <- procesa_valores(tabla_procesada)
+  tabla_procesada <- procesaValores(tabla_procesada)
   
-  return(list(currency,tabla_procesada))
+  return(list(tabla_procesada, currency_archivo))
 }
 
 cargaFinancialsBalanceSheet <- function(ruta_balance_sheet_excel = "./tablas_input/Financials/balance_sheet/012_BalanceSheet_AluarAluminioArgentinoSAIC.xlsx"){
+  msg <- glue::glue("Entrando en la función financials/cargaFinancialsBalanceSheet con el archivo: {ruta_balance_sheet_excel}")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   #leo la tabla
   balance_sheet_excel <- read_excel(ruta_balance_sheet_excel)
-  cat("se cargó el archivo de valuation: ",ruta_balance_sheet_excel,"\n", sep="")
   #detecto el formato de la tabla
   lista_formato <- detectaFormatoTabla(balance_sheet_excel)
   balance_sheet_excel <- lista_formato[[1]]
   nombre_empresa <- lista_formato[[2]]
   datos_fechas <- lista_formato[[3]]
+  formato <- lista_formato[[4]]
+  currency_archivo <- lista_formato[[5]]
+  #extraigo variables
   employees <- extraeVariables(nombre_empresa, "Employees - Full-Time/Full-Time Equivalents - Period End", balance_sheet_excel, datos_fechas)
   total_capital <- extraeVariables(nombre_empresa, "Total Capital", balance_sheet_excel, datos_fechas)
   working_capital <- extraeVariables(nombre_empresa, "Working Capital", balance_sheet_excel, datos_fechas)
@@ -240,22 +290,23 @@ cargaFinancialsBalanceSheet <- function(ruta_balance_sheet_excel = "./tablas_inp
                               )
   
   tabla_procesada <- tabla_procesada %>% pivot_longer(cols=!c(empresa, variable), names_to = "anho", values_to = "valor")
-  tabla_procesada <- procesa_valores(tabla_procesada)
+  tabla_procesada <- procesaValores(tabla_procesada)
   
-  return(tabla_procesada)
+  return(list(tabla_procesada, currency_archivo))
 }
 
 cargaFinancialsCashFlow <- function(ruta_cash_flow_excel = "./tablas_input/Financials/cash_flow/012_CashFlow_AluarAluminioArgentinoSAIC.xlsx"){
+  msg <- glue::glue("Entrando en la función financials/cargaFinancialsCashFlow con el archivo: {ruta_cash_flow_excel}")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   #leo la tabla
   cash_flow_excel <- read_excel(ruta_cash_flow_excel)
-  cat("se cargó el archivo de valuation: ",ruta_cash_flow_excel,"\n", sep="")
   #detecto el formato de la tabla
   lista_formato <- detectaFormatoTabla(cash_flow_excel)
   cash_flow_excel <- lista_formato[[1]]
   nombre_empresa <- lista_formato[[2]]
-  #if(nombre_empresa == "Centrais Eletricas Brasileiras 3 13 23"){stop(paste("El archivo con el nombre malo es ",ruta_income_statement_excel, sep = ""))}
   datos_fechas <- lista_formato[[3]]
   formato <- lista_formato[[4]]
+  currency_archivo <- lista_formato[[5]]
   #extraigo las variables
   if(formato == 1){
     dividends_paid <- extraeVariables(nombre_empresa, "Dividends Paid - Cash - Total - Cash Flow", cash_flow_excel, datos_fechas)
@@ -279,57 +330,80 @@ cargaFinancialsCashFlow <- function(ruta_cash_flow_excel = "./tablas_input/Finan
   
   tabla_procesada <- bind_rows(dividends_paid, dividends_received)
   tabla_procesada <- tabla_procesada %>% pivot_longer(cols=!c(empresa, variable), names_to = "anho", values_to = "valor")
-  tabla_procesada <- procesa_valores(tabla_procesada)
+  tabla_procesada <- procesaValores(tabla_procesada)
   
-  return(tabla_procesada)
+  return(list(tabla_procesada, currency_archivo))
 }
 
 
 #Funciones de procesamiento
 
 procesaArchivoFinancials <- function(ruta_archivo, lista_empresas_principales_in, tipo_financials="automatic"){
+  msg <- glue::glue("Entrando en la función financials/procesaArchivoFinancials con - ruta_archivo: {ruta_archivo}; tipo_financials: {tipo_financials}")
+  log_info_multi(msg, namespaces = c("global", "financials"))
   lista_empresas_principales <- lista_empresas_principales_in
   
   if(tipo_financials == "automatic"){
     tipo_financials <- str_extract(ruta_archivo, regex("(IncomeStatement|BalanceSheet|Valuation|CashFlow)", ignore_case = TRUE))
-  
-    }
-  currency <- "undefined"
+  }
   empresa_principal <- NA
   tabla_financials <- NA
   
   if(grepl("IncomeStatement", tipo_financials, ignore.case = TRUE)){
-    tabla_financials <- cargaFinancialsIncomeStatement(ruta_income_statement_excel = ruta_archivo)
+    list <- cargaFinancialsIncomeStatement(ruta_income_statement_excel = ruta_archivo)
+    tabla_financials <- list[[1]]
+    currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
     empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsIncomeStatement y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
+    log_debug_multi(msg, namespaces = c("global", "financials"))
     
   }else if(grepl("Valuation", tipo_financials, ignore.case = TRUE)){
-    lista_valuation <- cargaFinancialsValuation(ruta_valuation_excel =  ruta_archivo)
-    currency <- lista_valuation[[1]]
-    tabla_financials <- lista_valuation[[2]]
+    list <- cargaFinancialsValuation(ruta_valuation_excel =  ruta_archivo)
+    tabla_financials <- list[[1]]
+    currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
     empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsValuation y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
+    log_debug_multi(msg, namespaces = c("global", "financials"))
     
   }else if(grepl("BalanceSheet", tipo_financials, ignore.case = TRUE)){
-    tabla_financials <- cargaFinancialsBalanceSheet(ruta_balance_sheet_excel =  ruta_archivo)
+    list <- cargaFinancialsBalanceSheet(ruta_balance_sheet_excel =  ruta_archivo)
+    tabla_financials <- list[[1]]
+    currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
-    #control
     empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
-    empresa_principal$aumentaFinancials(tabla_financials)
+    msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsBalanceSheet y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
+    log_debug_multi(msg, namespaces = c("global", "financials"))
     
   }else if(grepl("CashFlow", tipo_financials, ignore.case = TRUE)){
-    tabla_financials <- cargaFinancialsCashFlow(ruta_cash_flow_excel = ruta_archivo)
+    list <- cargaFinancialsCashFlow(ruta_cash_flow_excel = ruta_archivo)
+    tabla_financials <- list[[1]]
+    currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
     empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
-    
-  }else{
+    msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsCashFlow y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
+    log_debug_multi(msg, namespaces = c("global", "financials"))
     
   }
-  return(list(empresa_principal, tabla_financials, currency))
+  if(empresa_principal$currency == currency_archivo){
+    tabla_financials_dolares <- reconvierteValorInOutArray(currency_archivo, "USD", tabla_financials)
+    tabla_financials_dolares_ajustados <- reconvierteValorUSDArray(currency_archivo, "2023", tabla_financials)
+    msg <- glue::glue("El currency de la empresa coincide con el currency_archivo: {currency_archivo}")
+    log_trace_multi(msg, namespaces = c("financials"))
+  } else{
+    msg <- glue::glue("El currency de la empresa: {empresa_principal$currency} no coincide con el currency_archivo: {currency_archivo}")
+    log_trace_multi(msg, namespaces = c("financials"))
+    tabla_financials <- reconvierteValorInOutArray(currency_archivo, empresa_principal$currency, tabla_financials)
+    tabla_financials_dolares <- reconvierteValorInOutArray(empresa_principal$currency, "USD", tabla_financials)
+    tabla_financials_dolares_ajustados <- reconvierteValorUSDArray(empresa_principal$currency, "2023", tabla_financials)
+  }
+  return(list(empresa_principal, tabla_financials, tabla_financials_dolares, tabla_financials_dolares_ajustados))
 }
 
 procesaFinancials <- function(ruta_financials = "./tablas_input/Financials", lista_empresas_principales_in){
-  
+  msg <- glue::glue("Entrando en la función financials/procesaFinancials")
+  log_debug_multi(msg, namespaces = c("global", "financials"))
   ruta_income_statement <- paste0(ruta_financials,"/income_statement")
   ruta_valuation <- paste0(ruta_financials,"/valuation")
   ruta_balance_sheet <- paste0(ruta_financials,"/balance_sheet")
@@ -352,9 +426,13 @@ procesaFinancials <- function(ruta_financials = "./tablas_input/Financials", lis
     lista <- procesaArchivoFinancials(ruta_archivo = archivo, lista_empresas_principales_in = lista_empresas_principales)
     empresa_principal <- lista[[1]]
     tabla_financials <- lista[[2]]
-    currency <- lista[[3]]
+    tabla_financials_dolares <- lista[[3]]
+    tabla_financials_dolares_ajustados <- lista[[4]]
     empresa_principal$aumentaFinancials(tabla_financials)
-    if (currency != "undefined"){empresa_principal$currency <- currency}
+    empresa_principal$aumentaFinancialsDolares(tabla_financials_dolares)
+    empresa_principal$aumentaFinancialsDolaresAjustados(tabla_financials_dolares_ajustados)
+    msg <- glue::glue("Tablas de financials, financials_dolares y financials_dolares_ajustados procesadas para la empresa: {empresa_principal$name}")
+    log_trace_multi(msg, namespaces = c("financials"))
   }
   
   return(lista_empresas_principales)
