@@ -20,7 +20,7 @@ log_threshold(INFO, namespace = "treestructure")
 log_appender(appender_tee("logs/treestructure.log"), namespace = "treestructure")
 
 # Namespace para el módulo financiero
-log_threshold(INFO, namespace = "financials")
+log_threshold(TRACE, namespace = "financials")
 log_appender(appender_tee("logs/financials.log"), namespace = "financials")
 
 # Namespace para el módulo de configuración de familias

@@ -57,8 +57,8 @@ extraeCurrencyArchivo <- function(tabla){
   msg <- glue::glue("Entrando en la función financials/extraeCurrencyArchivo")
   log_trace_multi(msg, namespaces = c("global", "financials"))
   currency_archivo <- list()
-  if (tabla[1,1] == "Company Name"){
-    currency_archivo <- append(currency_archivo, tabla[tabla[[1]] == "Standardized Currency",2])
+  if(tabla[1,1] == "Company Name"){
+    currency_archivo <- append(currency_archivo, tabla[(!is.na(tabla[[1]]))&(tabla[[1]] == "Standardized Currency"),2])
   } else{
     tabla_currency_patterns <- read_excel("./tablas_input/auxiliares/tabla_currency_patterns.xlsx")
     lista_primera_columna <- unlist(tabla[,1])
@@ -70,13 +70,15 @@ extraeCurrencyArchivo <- function(tabla){
       }
     }) %>% compact()  # de purrr, elimina los NULL
   }
+  
+  if(length(currency_archivo) > 1) {
+    msg <- paste("La empresa tiene más de una currency detectada en un archivo: ", paste(currency_archivo, collapse=","), sep="")
+    log_error_multi(msg, namespaces = c("global", "financials"))
+    currency_archivo <- currency_archivo[[1]]
+    
+  }
   if((is.na(currency_archivo)|(is.null(currency_archivo)))){
     stop("currency archivo no encontrada")
-  }
-  if(length(currency_archivo) > 1) {
-    msg <- paste("Lista de currencies: ", paste(currency_archivo, collapse=","), sep="")
-    log_error_multi(msg, namespaces = c("global", "financials"))
-    
   }
   msg <- glue::glue("Parámetros procesados de la función extraeCurrencyArchivo - currency_archivo: {currency_archivo}")
   log_trace_multi(msg, namespaces = c("financials"))
@@ -164,7 +166,7 @@ procesaValores <- function(tabla_procesada_in){
   log_trace_multi(msg, namespaces = c("global", "financials"))
   tabla_procesada <- tabla_procesada_in
   tabla_procesada$valor[!grepl("\\(", tabla_procesada$valor)] <- gsub("\\,", "", tabla_procesada$valor[!grepl("\\(", tabla_procesada$valor)])
-  tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)] <- gsub(",(?=[^,]*$)", ".", tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)], perl = TRUE )
+  #tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)] <- gsub(",(?=[^,]*$)", ".", tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)], perl = TRUE )
   tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)] <- gsub("\\,", "", tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)])
   tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)] <- round(as.numeric(gsub("^\\(([-0-9\\.]+)\\)$", "-\\1", tabla_procesada$valor[grepl("\\(", tabla_procesada$valor)])),2)
   tabla_procesada$valor <- as.numeric(tabla_procesada$valor)
@@ -354,7 +356,13 @@ procesaArchivoFinancials <- function(ruta_archivo, lista_empresas_principales_in
     tabla_financials <- list[[1]]
     currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
-    empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    if(lista_empresas_principales$verificaEntidadLista(nombre_empresa)){
+      empresa_principal <- lista_empresas_principales$extraeEntidadLista(nombre_empresa)
+    } else{
+      msg <- glue::glue("financials/procesaArchivoFinancials: la empresa: {nombre_empresa} no tiene ni shareholders ni treestructure")
+      log_error_multi(msg, namespaces = c("global", "financials"))
+      return(NULL)
+    }
     msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsIncomeStatement y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
     log_debug_multi(msg, namespaces = c("global", "financials"))
     
@@ -363,7 +371,13 @@ procesaArchivoFinancials <- function(ruta_archivo, lista_empresas_principales_in
     tabla_financials <- list[[1]]
     currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
-    empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    if(lista_empresas_principales$verificaEntidadLista(nombre_empresa)){
+      empresa_principal <- lista_empresas_principales$extraeEntidadLista(nombre_empresa)
+    } else{
+      msg <- glue::glue("financials/procesaArchivoFinancials: la empresa: {nombre_empresa} no tiene ni shareholders ni treestructure")
+      log_error_multi(msg, namespaces = c("global", "financials"))
+      return(NULL)
+    }
     msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsValuation y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
     log_debug_multi(msg, namespaces = c("global", "financials"))
     
@@ -372,7 +386,13 @@ procesaArchivoFinancials <- function(ruta_archivo, lista_empresas_principales_in
     tabla_financials <- list[[1]]
     currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
-    empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    if(lista_empresas_principales$verificaEntidadLista(nombre_empresa)){
+      empresa_principal <- lista_empresas_principales$extraeEntidadLista(nombre_empresa)
+    } else{
+      msg <- glue::glue("financials/procesaArchivoFinancials: la empresa: {nombre_empresa} no tiene ni shareholders ni treestructure")
+      log_error_multi(msg, namespaces = c("global", "financials"))
+      return(NULL)
+    }
     msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsBalanceSheet y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
     log_debug_multi(msg, namespaces = c("global", "financials"))
     
@@ -381,7 +401,13 @@ procesaArchivoFinancials <- function(ruta_archivo, lista_empresas_principales_in
     tabla_financials <- list[[1]]
     currency_archivo <- list[[2]]
     nombre_empresa <- as.character(tabla_financials[1,1])
-    empresa_principal <- lista_empresas_principales$extraeCreaEntidadLista(nombre_empresa)
+    if(lista_empresas_principales$verificaEntidadLista(nombre_empresa)){
+      empresa_principal <- lista_empresas_principales$extraeEntidadLista(nombre_empresa)
+    } else{
+      msg <- glue::glue("financials/procesaArchivoFinancials: la empresa: {nombre_empresa} no tiene ni shareholders ni treestructure")
+      log_error_multi(msg, namespaces = c("global", "financials"))
+      return(NULL)
+    }
     msg <- glue::glue("Procesando el archivo: {ruta_archivo} con cargaFinancialsCashFlow y nombre_empresa: {nombre_empresa}; currency_archivo: {currency_archivo}")
     log_debug_multi(msg, namespaces = c("global", "financials"))
     
@@ -424,15 +450,17 @@ procesaFinancials <- function(ruta_financials = "./tablas_input/Financials", lis
   for(archivo in archivos_total){
     
     lista <- procesaArchivoFinancials(ruta_archivo = archivo, lista_empresas_principales_in = lista_empresas_principales)
-    empresa_principal <- lista[[1]]
-    tabla_financials <- lista[[2]]
-    tabla_financials_dolares <- lista[[3]]
-    tabla_financials_dolares_ajustados <- lista[[4]]
-    empresa_principal$aumentaFinancials(tabla_financials)
-    empresa_principal$aumentaFinancialsDolares(tabla_financials_dolares)
-    empresa_principal$aumentaFinancialsDolaresAjustados(tabla_financials_dolares_ajustados)
-    msg <- glue::glue("Tablas de financials, financials_dolares y financials_dolares_ajustados procesadas para la empresa: {empresa_principal$name}")
-    log_trace_multi(msg, namespaces = c("financials"))
+    if(!is.null(lista)){
+      empresa_principal <- lista[[1]]
+      tabla_financials <- lista[[2]]
+      tabla_financials_dolares <- lista[[3]]
+      tabla_financials_dolares_ajustados <- lista[[4]]
+      empresa_principal$aumentaFinancials(tabla_financials)
+      empresa_principal$aumentaFinancialsDolares(tabla_financials_dolares)
+      empresa_principal$aumentaFinancialsDolaresAjustados(tabla_financials_dolares_ajustados)
+      msg <- glue::glue("Tablas de financials, financials_dolares y financials_dolares_ajustados procesadas para la empresa: {empresa_principal$name}")
+      log_trace_multi(msg, namespaces = c("financials"))
+    }
   }
   
   return(lista_empresas_principales)

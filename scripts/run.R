@@ -28,7 +28,7 @@ lista_empresas_principales$ajustaTreeStructureEmpresas()
 
 
 lista_empresas_principales <- procesaFamilias(lista_entidades_principales_in=lista_empresas_principales)
-#lista_empresas_principales <- procesaReclasificaIndustriaEmpresa2(lista_entidades_principales_in=lista_empresas_principales)
+lista_empresas_principales <- procesaReclasificaIndustriaEmpresa2(lista_entidades_principales_in=lista_empresas_principales)
 
 #Red
 #lista_red <- lista_empresas_principales$sacaTablasRedListaEntidades(,insertar_neo4j=TRUE)

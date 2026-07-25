@@ -1,6 +1,14 @@
 ##funciones auxiliares
 ##pruebo a cargar directo de los excel
 ### función que la fecha del número de excel
+
+##variables auxiliares
+library(readxl)
+
+tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
+
+
+## funciones auxiliares
 xldate<- function(x) {
   msg <- glue::glue("Entrando en la función xldate")
   log_trace_multi(msg, namespaces = c("auxiliares"))
@@ -192,15 +200,13 @@ procesaReclasificaIndustriaEmpresa2 <- function(lista_entidades_principales_in, 
 reconvierteValorUSD <- function(currency, anho_base, anho_recoleccion, list_valor){
   msg <- glue::glue("Entrando en la función reconvierteValorUSD")
   log_trace_multi(msg, namespaces = c("auxiliares"))
-  tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
-  
   list_valor_ajustado <- list_valor
   for (i in 1:length(list_valor)){
     #tasa respecto al dólar, 1/valor de tabla.
     tasa_cambio <- round(1/as.numeric(tabla_monedas[tabla_monedas$monedas==currency, colnames(tabla_monedas)==anho_recoleccion]), 4)
     #dividir por el año de recolección y multiplicar por el año base
     tasa_inflacion <- round(as.numeric(tabla_monedas[1,colnames(tabla_monedas)==anho_base])/as.numeric(tabla_monedas[1,colnames(tabla_monedas)==anho_recoleccion]),20)
-    list_valor_ajustado[i] <- round(as.numeric(list_valor[i])*tasa_cambio*tasa_inflacion,0)
+    list_valor_ajustado[i] <- round(as.numeric(list_valor[i])*tasa_cambio*tasa_inflacion,20)
   }
   return(list_valor_ajustado)
 }
@@ -209,7 +215,6 @@ reconvierteValorUSD <- function(currency, anho_base, anho_recoleccion, list_valo
 reconvierteValorUSDArray <- function(currency, anho_base, df_valor){
   msg <- glue::glue("Entrando en la función reconvierteValorUSDArray")
   log_trace_multi(msg, namespaces = c("auxiliares"))
-  tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
   df_valor_ajustado <- df_valor
   for(i in 1:nrow(df_valor)){
     row <- df_valor[i,]
@@ -224,12 +229,11 @@ reconvierteValorUSDArray <- function(currency, anho_base, df_valor){
 reconvierteValorInOut <- function(currency_in, currency_out, anho_recoleccion, list_valor){
   msg <- glue::glue("Entrando en la función reconvierteValorInOut")
   log_trace_multi(msg, namespaces = c("auxiliares"))
-  tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
   list_valor_out <- list_valor
   for(i in 1:length(list_valor)){
     #tasa entre divisas diferentes
     tasa_cambio <- round(as.numeric(tabla_monedas[tabla_monedas$monedas==currency_out, colnames(tabla_monedas)==anho_recoleccion])/as.numeric(tabla_monedas[tabla_monedas$monedas==currency_in, colnames(tabla_monedas)==anho_recoleccion]),20)
-    list_valor_out[i] <- round(as.numeric(list_valor[i])*tasa_cambio,0)
+    list_valor_out[i] <- round(as.numeric(list_valor[i])*tasa_cambio,20)
   }
   return(list_valor_out)
 }
@@ -238,7 +242,6 @@ reconvierteValorInOut <- function(currency_in, currency_out, anho_recoleccion, l
 reconvierteValorInOutArray <- function(currency_in, currency_out, df_valor){
   msg <- glue::glue("Entrando en la función reconvierteValorInOutArray")
   log_trace_multi(msg, namespaces = c("auxiliares"))
-  tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
   df_valor_ajustado <- df_valor
   for(i in 1:nrow(df_valor)){
     row <- df_valor[i,]

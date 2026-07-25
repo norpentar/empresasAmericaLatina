@@ -221,6 +221,18 @@ Empresa <- R6Class("Empresa",
         private$.grupo_familiar <- grupo_familiar
         private$.nombre_familias <- nombre_familias
         private$.pais_origen_familias <- pais_origen_familias
+        private$.indice_accionistas <- new.env(hash = TRUE, parent = emptyenv())
+        if(!is.null(private$.accionistas)){
+          for(accionista in private$.accionistas){
+            assign(accionista$entidad$name, accionista, envir = private$.indice_accionistas)  # lo registramos en el índice
+          }  
+        }
+        private$.indice_filiales <- new.env(hash = TRUE, parent = emptyenv())
+        if(!is.null(private$.filiales)){
+          for(filial in private$.filiales){
+            assign(filial$empresa$name, filial, envir = private$.indice_filiales)  # lo registramos en el índice
+          }  
+        }
         msg <- glue::glue("Objeto empresa creado con nombre: {private$.name}")
         log_trace(msg, namespace = c("objetos"))
     },
@@ -390,30 +402,40 @@ Empresa <- R6Class("Empresa",
         summarise(valor = first(valor, na_rm = TRUE), .groups = "drop")
       invisible(self)
     },
+    verificaAccionista = function (nombre_accionista){
+      nombre_accionista <- gsub("‘|’|'|-|–", " ", nombre_accionista) 
+      return(exists(nombre_accionista, envir = private$.indice_accionistas, inherits = FALSE))
+    },
     aumentaAccionistas = function(accionista){
       stopifnot(class(accionista)[1] == "Accionista")
-      #compruebo que no este repetido
-      for (a in self$accionistas){
-        if(a$entidad$name == accionista$entidad$name){
-          msg <- glue::glue("El accionista: {accionista$entidad$name} ya se encuentra asignado a la empresa: {self$name}")
-          log_warn_multi(msg, namespaces = c("global", "objetos"))
-          return(invisible(self))
-        }
+      name <- accionista$entidad$name
+      
+      if(!self$verificaAccionista(name)){
+        private$.accionistas <- append(private$.accionistas , accionista)
+        assign(name, accionista, envir = private$.indice_accionistas)  # lo registramos en el índice
+      } else{
+        msg <- glue::glue("Empresa/aumentaAccionistas, accionista ({name}) ya existe en la lista ({private$.name})")
+        log_error_multi(msg, namespaces = c("global", "objetos"))
       }
-      private$.accionistas <- append(private$.accionistas, accionista)
+      
       invisible(self)
+    },
+    verificaFilial = function (nombre_filial){
+      nombre_filial <- gsub("‘|’|'|-|–", " ", nombre_filial) 
+      return(exists(nombre_filial, envir = private$.indice_filiales, inherits = FALSE))
     },
     aumentaFiliales = function(filial){
       stopifnot(class(filial)[1] == "Filial")
-      #compruebo que no está ya incluída en la empresa
-      for (f in self$filiales){
-        if(f$empresa$name == filial$empresa$name){
-          msg <- glue::glue("La filial: {filial$empresa$name} ya se encuentra asignada a la empresa: {self$name}")
-          log_error_multi(msg, namespaces = c("global", "objetos"))
-          invisible(self)
-        }
+      name <- filial$empresa$name
+      
+      if(!self$verificaFilial(name)){
+        private$.filiales <- append(private$.filiales , filial)
+        assign(name, filial, envir = private$.indice_filiales)  # lo registramos en el índice
+      } else{
+        msg <- glue::glue("Empresa/aumentaFiliales, filial ({name}) ya existe en la lista ({private$.name})")
+        log_error_multi(msg, namespaces = c("global", "objetos"))
       }
-      private$.filiales <- append(private$.filiales, filial)
+      
       invisible(self)
     },
     accionistasTabulado = function(){
@@ -533,25 +555,36 @@ Empresa <- R6Class("Empresa",
     },
     queryCypherFinancials = function(){
       query <- NULL
+      sacaLineasVariables <- function(tipo_financials){
+        if(tipo_financials == "currency"){
+          variables_tabla <- private$.financials %>% select(-c(empresa)) %>%
+            pivot_wider(names_from = anho, values_from = valor)
+        } else if(tipo_financials == "dolares"){
+            variables_tabla <- private$.financials_dolares %>% select(-c(empresa)) %>%
+              pivot_wider(names_from = anho, values_from = valor)
+        } else if(tipo_financials == "dolares_ajustados"){
+            variables_tabla <- private$.financials_dolares_ajustados %>% select(-c(empresa)) %>%
+              pivot_wider(names_from = anho, values_from = valor)
+        }
+        variables_tabla[is.na(variables_tabla)] <- 0
+        variables_tabla$variable <- paste("r.", gsub(" ", "_", tolower(variables_tabla$variable)), sep="")
+        
+        lineas_variables <- apply(variables_tabla, 1, function(fila) paste("'",fila[1],"' = [", paste(fila[-1], collapse=", "),"]",sep=""))
+        
+        return(lineas_variables)
+      }
+      
       if (!is.null(private$.financials)){
         source <- private$.name
         target <- paste(private$.name, "_financials", sep = "")
-        variables_tabla <- private$.financials %>% select(-c(empresa,valor_ajustado)) %>%
-          pivot_wider(names_from = anho, values_from = valor)
-        variables_tabla[is.na(variables_tabla)] <- 0
-        variables_tabla$variable <- paste("r.", gsub(" ", "_", tolower(variables_tabla$variable)), sep="")
-        lineas_variables <- apply(variables_tabla, 1, function(fila) paste("'",fila[1],"' = [", paste(fila[-1], collapse=", "),"]",sep=""))
         
-        variables_tabla_ajustada <- private$.financials %>% select(-c(empresa,valor)) %>%
-          pivot_wider(names_from = anho, values_from = valor_ajustado)
-        variables_tabla_ajustada[is.na(variables_tabla_ajustada)] <- 0
-        variables_tabla_ajustada$variable <- paste(gsub(" ", "_", tolower(variables_tabla$variable)),"_ajustada", sep="")
-        lineas_variables_ajustada <- apply(variables_tabla_ajustada, 1, function(fila) paste("'",fila[1],"' = [", paste(fila[-1], collapse=", "),"]",sep=""))
-        
-      
+        lineas_variables <- sacaLineasVariables("currency")
+        lineas_variables_dolares <- sacaLineasVariables("dolares")
+        lineas_variables_dolares_ajustados <- sacaLineasVariables("dolares_ajustados")
+
         query_1 <- paste("MERGE (f:financials{name: '",target,"'});", sep = "")
         query_2 <- paste("MATCH (e:empresa{name: '",source,"'}) MATCH (f:financials{name: '",
-                         target,"'}) MERGE (e)-[r:financials]->(f) SET ", gsub("'|-", "", paste(c(lineas_variables, lineas_variables_ajustada), collapse=", ")), ";", sep = ""
+                         target,"'}) MERGE (e)-[r:financials]->(f) SET ", gsub("'|-", "", paste(c(lineas_variables, lineas_variables_dolares, lineas_variables_dolares_ajustados), collapse=", ")), ";", sep = ""
                         )
         query <- list(query_1, query_2)
         
@@ -624,8 +657,7 @@ Empresa <- R6Class("Empresa",
       invisible(self)
     },
     #esta función coje el país de la empresa y carga su currency.
-    cargaCurrencyPais = function(){
-      tabla_divisas_paises <- read_excel("./tablas_input/auxiliares/tabla_divisas_paises.xlsx")
+    cargaCurrencyPais = function(tabla_divisas_paises){
       currency <- tabla_divisas_paises$currency[tabla_divisas_paises$pais==private$.country_region]
       if(is.null(currency)){
         msg <- glue::glue("Empresa: {private$.name} - Error en la asignación de currency a partir del país: {private$.country_region}")
@@ -1105,7 +1137,9 @@ Empresa <- R6Class("Empresa",
     .financials_dolares_ajustados = NULL,
     .grupo_familiar = "no",
     .nombre_familias = NA,
-    .pais_origen_familias = NA
+    .pais_origen_familias = NA,
+    .indice_accionistas = NULL,
+    .indice_filiales = NULL
   )
 )
 
@@ -1658,8 +1692,6 @@ ListaEntidades <- R6Class("ListaEntidades",
     verificaEntidadLista = function (nombre_entidad){
       nombre_entidad <- gsub("‘|’|'|-|–", " ", nombre_entidad) 
       return(exists(nombre_entidad, envir = private$.indice_entidades, inherits = FALSE))
-      #existe <- any(sapply(private$.entidades, function(entidad) entidad$name) == nombre_entidad)
-      #return(existe)
     },
     extraeEntidadLista = function (nombre_entidad){
       nombre_entidad <- gsub("‘|’|'|-|–", " ", nombre_entidad)
@@ -1971,16 +2003,21 @@ ListaEntidades <- R6Class("ListaEntidades",
       #ajusto empresas que no tienen país.
       e1 <- "Hapvida Participacoes e Investimentos SA"
       e2 <- "Pluz Energia Peru SAA"
+      
       emp_1 <- self$extraeEntidadesNombre(e1)$entidades
       emp_2 <- self$extraeEntidadesNombre(e2)$entidades
+
       if(length(emp_1) == 1) emp_1[[1]]$country_region <- "Brazil"
       if(length(emp_2) == 1) emp_2[[1]]$country_region <- "Peru"
+
       invisible(self)
     },
     #esta función carga las currencies según el paíse de las empresas. Es importante que las empresas tengan país definido, si no da error.
     cargaCurrenciesPaisesEmpresas = function(){
+      tabla_divisas_paises <- read_excel("./tablas_input/auxiliares/tabla_divisas_paises.xlsx")
+      
       for(entidad in private$.entidades){
-        entidad$cargaCurrencyPais()
+        entidad$cargaCurrencyPais(tabla_divisas_paises)
       }
       invisible(self)
     }

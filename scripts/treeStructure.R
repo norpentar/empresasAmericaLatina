@@ -175,7 +175,8 @@ procesaTreeStructure <- function (treeStructure_input, lista_empresas_principale
     empresa_principal <- empresas_niveles_lista[[nivel_iteracion - 1]]
     empresa_principal$aumentaFiliales(filial)
     empresas_niveles_lista[[nivel_iteracion]] <- empresa_filial
-    cat("TreeStructure: procesada la iteración: ",i, " del total de: ", total_iteraciones,"\n", sep="")
+    msg <- glue::glue("TreeStructure: procesada la iteración: ",i, " del total de: ", total_iteraciones,"\n", sep="")
+    log_trace_multi(msg, namespaces = c("global","treestructure"))
   }
   
   lista_empresas_principales <- lista_empresas$extraeEntidadesPrincipales(valor = "si")

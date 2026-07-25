@@ -68,7 +68,8 @@ procesaShareholders <- function (shareholders_input){
                                  country_region = shareholders$country_region[i])
     
     empresa_principal$aumentaAccionistas(accionista)
-    cat("Shareholders: procesada la iteración: ",i," del total de: ", total_iteraciones, "\n", sep ="")
+    msg <- glue::glue("Shareholders: procesada la iteración: ",i," del total de: ", total_iteraciones, "\n", sep ="")
+    log_trace_multi(msg, namespaces = c("global", "accionistas"))
     
   }
   lista_entidades$entidades <- lista_entidades$entidades[-1]
