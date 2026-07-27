@@ -1,0 +1,135 @@
+---
+title: "Comparativo: ggiraph vs plotly"
+output:
+  html_document:
+    theme: flatly
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Paquetes necesarios:
+# install.packages(c("ggiraph", "plotly", "ggplot2", "dplyr"))
+library(ggplot2)
+library(ggiraph)
+library(plotly)
+library(dplyr)
+```
+
+```{r datos}
+# Mismos datos simulados que en la tabla de reactable, con un par de empresas más
+# para que el gráfico de barras tenga más sentido visual
+
+empresas <- data.frame(
+  nombre = c("Grupo Andino S.A.", "TransPacífico Corp", "MinerAustral Ltda",
+             "AgroCono Sur", "Bancolatam", "TelecomSur", "EnergiaVerde MX"),
+  pais = c("Ecuador", "Chile", "Perú", "Argentina", "Colombia", "Brasil", "México"),
+  sector = c("Energía", "Logística", "Minería", "Agroindustria",
+             "Finanzas", "Telecom", "Energía"),
+  ingresos_musd = c(1250, 890, 2100, 640, 1780, 1420, 980),
+  deuda_musd = c(430, 210, 980, 150, 690, 520, 310),
+  stringsAsFactors = FALSE
+)
+```
+
+## 1. Scatter: Ingresos vs. Deuda, coloreado por sector
+
+### Versión ggiraph
+
+Construyes el `ggplot` normal, y solo cambias `geom_point()` por `geom_point_interactive()`, añadiendo un `tooltip` y `data_id` (este último es clave: sirve para que, cuando conectemos con crosstalk/otro widget, el mismo `data_id` permita resaltar el mismo elemento en varios sitios).
+
+```{r ggiraph-scatter}
+p_scatter <- ggplot(empresas, aes(x = deuda_musd, y = ingresos_musd, color = sector)) +
+  geom_point_interactive(
+    aes(
+      tooltip = paste0(nombre, "<br>País: ", pais,
+                        "<br>Ingresos: ", ingresos_musd, " MUSD",
+                        "<br>Deuda: ", deuda_musd, " MUSD"),
+      data_id = nombre
+    ),
+    size = 4
+  ) +
+  labs(title = "Ingresos vs. Deuda", x = "Deuda (MUSD)", y = "Ingresos (MUSD)") +
+  theme_minimal()
+
+girafe(
+  ggobj = p_scatter,
+  width_svg = 7, height_svg = 4.5,
+  options = list(
+    opts_hover(css = "stroke:black;stroke-width:2px;"),
+    opts_tooltip(css = "background-color:white; padding:6px; border-radius:4px; box-shadow:1px 1px 4px rgba(0,0,0,0.2);")
+  )
+)
+```
+
+### Versión plotly
+
+Dos caminos: convertir un ggplot con `ggplotly()`, o construir el gráfico nativo con `plot_ly()`. Te muestro el nativo porque da más control sobre el tooltip.
+
+```{r plotly-scatter}
+plot_ly(
+  empresas,
+  x = ~deuda_musd, y = ~ingresos_musd,
+  color = ~sector,
+  text = ~paste0(nombre, "<br>País: ", pais,
+                 "<br>Ingresos: ", ingresos_musd, " MUSD",
+                 "<br>Deuda: ", deuda_musd, " MUSD"),
+  hoverinfo = "text",
+  type = "scatter", mode = "markers",
+  marker = list(size = 14)
+) %>%
+  layout(
+    title = "Ingresos vs. Deuda",
+    xaxis = list(title = "Deuda (MUSD)"),
+    yaxis = list(title = "Ingresos (MUSD)")
+  )
+```
+
+## 2. Barras: Ingresos por empresa
+
+### Versión ggiraph
+
+```{r ggiraph-bar}
+p_bar <- empresas %>%
+  arrange(desc(ingresos_musd)) %>%
+  mutate(nombre = factor(nombre, levels = nombre)) %>%
+  ggplot(aes(x = nombre, y = ingresos_musd, fill = sector)) +
+  geom_col_interactive(
+    aes(tooltip = paste0(ingresos_musd, " MUSD"), data_id = nombre)
+  ) +
+  labs(title = "Ingresos por empresa", x = NULL, y = "Ingresos (MUSD)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1))
+
+girafe(ggobj = p_bar, width_svg = 7, height_svg = 4.5)
+```
+
+### Versión plotly
+
+```{r plotly-bar}
+empresas_ordenadas <- empresas %>% arrange(desc(ingresos_musd))
+
+plot_ly(
+  empresas_ordenadas,
+  x = ~factor(nombre, levels = nombre), y = ~ingresos_musd,
+  color = ~sector,
+  type = "bar",
+  text = ~paste0(ingresos_musd, " MUSD"),
+  hoverinfo = "text"
+) %>%
+  layout(
+    title = "Ingresos por empresa",
+    xaxis = list(title = ""),
+    yaxis = list(title = "Ingresos (MUSD)")
+  )
+```
+
+## Notas para decidir
+
+- **Tooltip / hover:** en ggiraph el tooltip es un string HTML simple que tú compones a mano (flexible pero manual). En plotly, `hoverinfo`/`hovertemplate` da más opciones nativas (formato de números, múltiples líneas con menos código).
+- **Zoom:** plotly trae zoom/pan de fábrica en cualquier gráfico. En ggiraph necesitas activarlo explícitamente con `opts_zoom()`.
+- **Consistencia visual con el resto de tu trabajo en R:** si usas `ggplot2` para tus análisis y quieres que el gráfico interactivo se vea idéntico al estático que ya conoces, ggiraph gana — es literalmente tu mismo gráfico con una capa de interactividad.
+- **Selección cruzada con crosstalk:** ambos lo soportan. Plotly usa `highlight_key()` + `highlight()`; ggiraph usa el mismo `data_id` que ya ves arriba, comparado entre widgets. Cuando lleguemos a conectar tabla + gráfico + mapa, el código de "conexión" es parecido en ambos casos — no es un factor decisivo.
+- **Peso del documento final:** si vas a tener muchos gráficos en un solo .html, ggiraph genera SVGs más livianos; plotly cada gráfico carga su propio motor JS (aunque se comparte entre gráficos del mismo documento, así que no es tan grave).
+
+Con esto en mano, ¿te inclinas por alguno para seguir? Si no estás seguro aún, no pasa nada — podemos seguir con el grafo de accionistas (que ya sabemos que necesita `visNetwork` por lo de participación cruzada) y volver a esta decisión al final, viendo todo junto.

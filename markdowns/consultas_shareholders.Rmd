@@ -31,9 +31,8 @@ library(ggpubr)
 library(scales)
 library(ggforce)
 
-source("./clases_objetos.R")
-source("./accionistas.R")
-source("./run.R")
+
+#source("./run.R")
 lista_empresas_brasil <- lista_empresas_principales$extraeEntidadesPais("brazil")
 lista_empresas_mexico <- lista_empresas_principales$extraeEntidadesPais("mexico")
 lista_empresas_chile <- lista_empresas_principales$extraeEntidadesPais("chile")

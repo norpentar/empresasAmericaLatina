@@ -6,3 +6,8 @@ tablas_input/
 .Rproj.user/
 scripts/test.R
 logs/
+markdowns/comparativo_ggiraph_plotly.html
+markdowns/ejemplo_reactable.html
+markdowns/test.html
+markdowns/tutorial-reactable.html
+markdowns/tutorial_dataset/

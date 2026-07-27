@@ -14,6 +14,7 @@ library(jsonlite)
 library(visNetwork)
 library(bolt4jr)
 library(reticulate)
+library(here)
 
 #Entidad
 Entidad <- R6Class("Entidad",
@@ -459,7 +460,7 @@ Empresa <- R6Class("Empresa",
                      city = sapply(private$.accionistas, function(a) a$entidad$city),
                      country_region = sapply(private$.accionistas, function(a) a$entidad$country_region)
                      )
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_accionistasTabulado.csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export","tablas",paste(private$.name,"_accionistasTabulado.csv", sep="")), row.names = FALSE)
       return(tabla)
     },
     filialesTabulado = function(){
@@ -494,7 +495,7 @@ Empresa <- R6Class("Empresa",
                      pe_backed_status = sapply(private$.filiales, function(f) f$empresa$pe_backed_status)
                      )
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_filialesTabulado.csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export","tablas",paste(private$.name, "_filialesTabulado.csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     accionistasTabuladoAgrupado = function(campo_agrupacion, campo_ordenacion = NULL){
@@ -522,7 +523,7 @@ Empresa <- R6Class("Empresa",
         tabla <- tabla %>% arrange(desc(!!sym(campo_ordenacion)))
       }
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_accionistasTabuladoAgrupado_", campo_agrupacion, ".csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_accionistasTabuladoAgrupado_", campo_agrupacion, ".csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     filialesTabuladoAgrupado = function(campo_agrupacion, campo_ordenacion = NULL){
@@ -550,7 +551,7 @@ Empresa <- R6Class("Empresa",
         tabla <- tabla %>% arrange(desc(!!sym(campo_ordenacion)))
       }
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_filialesTabuladoAgrupado_", campo_agrupacion, ".csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_filialesTabuladoAgrupado_", campo_agrupacion, ".csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     queryCypherFinancials = function(){
@@ -1471,7 +1472,7 @@ ListaEntidades <- R6Class("ListaEntidades",
       
       tabla_nodos <- bind_rows(lapply(lista_nodos, function(nodo) nodo$sacaPropiedades()))  
       
-      write.csv(tabla_nodos, file = paste0("./export/tablas/neo4j/",private$.name,"_ListaEntidades_tabla_nodos.csv"))
+      write.csv(tabla_nodos, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_ListaEntidades_tabla_nodos.csv", sep = "")), row.names = FALSE)
     
       return(tabla_nodos)
     },
@@ -1492,8 +1493,8 @@ ListaEntidades <- R6Class("ListaEntidades",
       tabla_accionistas <- lista_tablas_accionistas %>% compact() %>% bind_rows()
       tabla_filiales <- lista_tablas_filiales %>% compact() %>% bind_rows()
       
-      write.csv(tabla_accionistas, file = paste0("./export/tablas/neo4j/",private$.name,"_ListaEntidades_tabla_accionistas.csv"))
-      write.csv(tabla_filiales, file = paste0("./export/tablas/neo4j/",private$.name,"_ListaEntidades_tabla_filiales.csv"))
+      write.csv(tabla_accionistas, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_ListaEntidades_tabla_accionistas.csv", sep ="")), row.names = FALSE)
+      write.csv(tabla_filiales, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_ListaEntidades_tabla_filiales.csv", sep ="")), row.names = FALSE)
       
       return(list(tabla_accionistas, tabla_filiales))
       
@@ -1529,11 +1530,11 @@ ListaEntidades <- R6Class("ListaEntidades",
       tabla_relaciones_paises <- tibble(source = unlist(lapply(lista_nodos, \(nodo) nodo$name)), target = unlist(lapply(lista_nodos, \(nodo) nodo$country_region)))
 
       ##imprimo las tablas
-      write.csv(tabla_nodos_entidades, file = paste0("./export/tablas/neo4j/",private$.name,"_nodos_entidades.csv"), row.names = FALSE)
-      write.csv(tabla_nodos_paises, file = paste0("./export/tablas/neo4j/",private$.name,"_nodos_paises.csv"), row.names = FALSE)
-      write.csv(tabla_accionistas, file = paste0("./export/tablas/neo4j/",private$.name,"_relaciones_accionistas.csv"), row.names = FALSE)
-      write.csv(tabla_filiales, file = paste0("./export/tablas/neo4j/",private$.name,"_relaciones_filiales.csv"), row.names = FALSE)
-      write.csv(tabla_relaciones_paises, file = paste0("./export/tablas/neo4j/",private$.name,"_relaciones_paises.csv"), row.names = FALSE)
+      write.csv(tabla_nodos_entidades, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_nodos_entidades.csv", sep ="")), row.names = FALSE)
+      write.csv(tabla_nodos_paises, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_nodos_paises.csv", sep = "")), row.names = FALSE)
+      write.csv(tabla_accionistas, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_relaciones_accionistas.csv", sep = "")), row.names = FALSE)
+      write.csv(tabla_filiales, file = here::here("export","tablas", "neo4j", paste(private$.name, "_relaciones_filiales.csv", sep = "")), row.names = FALSE)
+      write.csv(tabla_relaciones_paises, file = here::here("export", "tablas", "neo4j", paste(private$.name, "_relaciones_paises.csv", sep = "")), row.names = FALSE)
       ###en el directorio de neo4j también
       write.csv(tabla_nodos_entidades, file = paste0("/home/inigo/programas/neo4j/import/",private$.name,"_nodos_entidades.csv"), row.names = FALSE)
       write.csv(tabla_nodos_paises, file = paste0("/home/inigo/programas/neo4j/import/",private$.name,"_nodos_paises.csv"), row.names = FALSE)
@@ -1741,7 +1742,7 @@ ListaEntidades <- R6Class("ListaEntidades",
         })
       tabla_empresas <- lista_tabla_empresas %>% compact() %>% bind_rows()
       
-      write.csv(tabla_empresas, file=paste0("./export/tablas/",private$.name,"_entidadesTabulado.csv"), row.names = FALSE)
+      write.csv(tabla_empresas, file=here("export", "tablas", paste(private$.name, "_entidadesTabulado", sep = "")), row.names = FALSE)
       return(tabla_empresas)
     },
     entidadesTabuladoAgrupado = function(campo_agrupacion, campo_ordenacion = NULL){
@@ -1769,7 +1770,7 @@ ListaEntidades <- R6Class("ListaEntidades",
         tabla <- tabla %>% arrange(desc(!!sym(campo_ordenacion)))
       }
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_entidadesTabulado_", campo_agrupacion,".csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_entidadesTabulado_", campo_agrupacion, ".csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     entidadesAccionistasTabulado = function(){
@@ -1779,7 +1780,7 @@ ListaEntidades <- R6Class("ListaEntidades",
                         })
       tabla <- lista_tabulados %>% compact() %>% bind_rows() #elimino nulos
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_entidadesAccionistasTabulado"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export","tablas", paste(private$.name, "_entidadesAccionistasTabulado.csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     entidadesAccionistasTabuladoAgrupado = function(campo_agrupacion, campo_ordenacion = NULL){
@@ -1807,7 +1808,7 @@ ListaEntidades <- R6Class("ListaEntidades",
         tabla <- tabla %>% arrange(desc(!!sym(campo_ordenacion)))
       }
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_entidadesAccionistasTabuladoAgrupado_", campo_agrupacion,".csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_entidadesAccionistasTabuladoAgrupado_", campo_agrupacion, ".csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     entidadesFilialesTabulado = function(){
@@ -1816,7 +1817,7 @@ ListaEntidades <- R6Class("ListaEntidades",
                                 if(nrow(tabulado) == 0) return(NULL) else return(tabulado)
                                 })
       tabla <- lista_tabulados %>% compact() %>% bind_rows() #elimino nulos
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_entidadesFilialesTabulado"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_entidadesFilialesTabulado.csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     entidadesFilialesTabuladoAgrupado = function(campo_agrupacion, campo_ordenacion = NULL){
@@ -1844,7 +1845,7 @@ ListaEntidades <- R6Class("ListaEntidades",
         tabla <- tabla %>% arrange(desc(!!sym(campo_ordenacion)))
       }
       
-      write.csv(tabla, file=paste0("./export/tablas/",private$.name,"_entidadesFilialesTabuladoAgrupado_", campo_agrupacion,".csv"), row.names = FALSE)
+      write.csv(tabla, file=here::here("export", "tablas", paste(private$.name, "_entidadesFilialesTabuladoAgrupado", campo_agrupacion, ".csv", sep = "")), row.names = FALSE)
       return(tabla)
     },
     
@@ -1966,7 +1967,7 @@ ListaEntidades <- R6Class("ListaEntidades",
     queryCypherFinancialsEmpresas = function(){
       queries <- sapply(private$.entidades, \(entidad) entidad$queryCypherFinancials())
       query <- paste(queries, collapse = "\n")
-      write(query, file = "export/tablas/neo4j/queryFinancials.txt")
+      write(query, file = here::here("export", "tablas", "neo4j", "queryFinancials.txt"))
       return(query)
     },
     insertNeo4jFinancialsEmpresas = function(){

@@ -1,0 +1,127 @@
+---
+title: "Dashboard Interactivo en R Markdown"
+author: "Reporte Web"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: cosmo
+    highlight: textmate
+    toc: true
+    toc_float: true
+    self_contained: true
+---
+
+```{r setup, include=FALSE}
+# Configuración inicial de los chunks
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+
+# Carga de las librerías necesarias
+library(ggplot2)
+library(plotly)
+library(leaflet)
+library(DT)
+library(visNetwork)
+```
+
+## Introducción
+
+Este documento es un ejemplo de cómo integrar elementos 100% interactivos en un archivo HTML usando R Markdown. Al exportarlo, no necesitas un servidor de R (como Shiny); todo el código se compila en JavaScript y funciona de forma autónoma en cualquier navegador web.
+
+---
+
+## 1. Tablas con Filtros de Búsqueda (`DT`)
+
+La tabla a continuación incluye filtros específicos por columna en la parte superior, paginación dinámica y un buscador general en tiempo real. Usamos el set de datos nativo de R llamado `iris`.
+
+```{r tabla-interactiva}
+datatable(
+  iris, 
+  filter = 'top', 
+  extensions = 'Buttons',
+  options = list(
+    pageLength = 6, 
+    autoWidth = TRUE,
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel')
+  ),
+  rownames = FALSE
+)
+```
+
+## 2. Gráficos Interactivos (`plotly`)
+
+Al pasar el cursor sobre los puntos, verás los detalles de cada dato (tooltips). También puedes seleccionar un área con el ratón para hacer zoom o hacer clic en la leyenda de la derecha para ocultar/mostrar categorías.
+
+```{r grafico-interactivo, fig.width=8, fig.height=5}
+# Creamos un gráfico base con ggplot2
+p <- ggplot(mtcars, aes(x = wt, y = mpg, color = factor(cyl), text = paste("Auto:", rownames(mtcars)))) +
+  geom_point(size = 3, alpha = 0.8) +
+  labs(
+    title = "Rendimiento vs Peso del Vehículo",
+    x = "Peso (miles de libras)",
+    y = "Millas por Galón (MPG)",
+    color = "Cilindros"
+  ) +
+  theme_minimal()
+
+# Lo convertimos a interactivo pasándole el ggplot
+ggplotly(p, tooltip = c("text", "x", "y"))
+```
+
+---
+
+## 3. Mapas Interactivos (`leaflet`)
+
+Puedes arrastrar el mapa y usar la rueda del ratón para hacer zoom. Si haces clic en los círculos azules, aparecerá una ventana emergente.
+
+```{r mapa-interactivo, fig.width=8, fig.height=4}
+# Datos de ejemplo: Capitales de Sudamérica
+capitales <- data.frame(
+  ciudad = c("Quito", "Bogotá", "Lima", "Buenos Aires"),
+  lat = c(-0.22, 4.61, -12.04, -34.60),
+  lng = c(-78.50, -74.08, -77.03, -58.38)
+)
+
+leaflet(capitales) %>%
+  addTiles() %>%  # Capa de mapa base (OpenStreetMap)
+  addCircles(
+    lng = ~lng, lat = ~lat, 
+    popup = ~ciudad, 
+    radius = 50000, 
+    color = "#2c3e50",
+    fillColor = "#18bc9c", 
+    fillOpacity = 0.7
+  ) %>%
+  setView(lng = -70, lat = -15, zoom = 3)
+```
+
+## 4. Grafos y Redes de Conexiones (`visNetwork`)
+
+Este grafo cuenta con simulación física de movimiento. Puedes arrastrar los nodos (círculos), alejarlos y usar el menú desplegable superior para seleccionar un nodo específico y resaltar sus conexiones directas.
+
+```{r red-interactiva, fig.width=8, fig.height=5}
+# Definición de los nodos con diseño básico
+nodos <- data.frame(
+  id = 1:5, 
+  label = c("Gerente", "Analista A", "Analista B", "Soporte", "Cliente"),
+  group = c("Directivo", "Técnico", "Técnico", "Soporte", "Externo"),
+  value = c(30, 20, 20, 15, 25) # Tamaño del nodo
+)
+
+# Conexiones (De dónde a dónde va la línea)
+conexiones <- data.frame(
+  from = c(1, 1, 2, 3, 4), 
+  to   = c(2, 3, 4, 4, 5)
+)
+
+visNetwork(nodos, conexiones, width = "100%") %>% 
+  visGroups(groupname = "Directivo", color = "#e74c3c") %>%
+  visGroups(groupname = "Técnico", color = "#3498db") %>%
+  visGroups(groupname = "Soporte", color = "#f1c40f") %>%
+  visGroups(groupname = "Externo", color = "#2ecc71") %>%
+  visOptions(
+    highlightNearest = TRUE, 
+    nodesIdSelection = list(enabled = TRUE, main = "Seleccionar Puesto:")
+  ) %>%
+  visPhysics(stabilization = TRUE)
+```

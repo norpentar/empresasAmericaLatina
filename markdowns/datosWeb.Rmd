@@ -1,0 +1,47 @@
+---
+title: "Datos Web"
+author: "Iñigo Arrazola"
+date: "2026-07-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+library(dplyr)
+#library(neo4r)
+library(visNetwork)
+library(bolt4jr)
+library(reticulate)
+library(readxl)
+library(purrr)
+library(grid)
+library(gridExtra)
+library(kableExtra)
+library(patchwork)
+library(ggplot2)
+library(dplyr)
+library(reactable)
+library(stringr)
+library(htmltools)
+library(reactablefmtr)
+library(ggiraph)
+library(purrr)
+library(giscoR)
+```
+
+##Introducción
+
+En esta página mostramos, a modo exploratorio, los datos de las principales empresas latinoamericanas y sus accionistas.
+
+#Exploración de las 300 empresas
+
+En la siguiente tabla mostramos los datos principales de las empresas latinoamericanas. Puede seleccionar una de ellas para que más abajo se despliegue información adicional sobre sus variables financieras, accionistas y filiales.
+
+```{r}
+tabla_empresas <- lista_empresas_principales$entidadesTabuladoAgrupado("investor_name")
+
+
+
+```
+
+

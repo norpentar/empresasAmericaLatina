@@ -1,0 +1,1215 @@
+---
+title: "Tutorial Reactable"
+author: "Iñigo Arrazola"
+date: "2026-07-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(dplyr)
+library(reactable)
+library(stringr)
+library(htmltools)
+library(reactablefmtr)
+library(ggiraph)
+library(ggplot2)
+library(purrr)
+library(giscoR)
+
+```
+
+#Cargo los datos
+
+```{r}
+german_stats <- readRDS("./tutorial_dataset/german_stats.rds")
+state_descriptions <- readRDS("./tutorial_dataset/state_descriptions.rds")
+
+```
+
+Comenzamos el tutorial. 
+
+#Limpio los datos total del final. Veo la tabla en bruto.
+
+```{r}
+german_stats_wo_total <- german_stats |> 
+  slice(-17) 
+german_stats_wo_total
+```
+
+Acá la tabla con reactable, el modo más básico.
+
+```{r}
+library(reactable)
+german_stats_wo_total |> 
+  reactable()
+```
+
+Se ve muy muy mal. Quitemos la paginación.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE
+  )
+```
+
+
+Default column settings
+
+Then, we can set the default settings for every column. By default we want to have:
+the content left-aligned (horizontally) and center-aligned (vertically),
+Column names in title case that use white space instead of _
+Bold text as well as a thick border for the column names
+
+
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      )
+    )
+  )
+```
+
+
+Then, we can add a footer to all columns by grabbing the last row of the german_stats data set. Remember? This data set has the totals in the last row. And while we’re at it, we can also set a bit of stylings for the footers.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    )
+  )
+```
+
+
+These settings aren’t perfect and we have to modify them for individual columns. But it’s a nice baseline. Now we only have to go through every column one by one to apply custom changes.
+
+#Setting the image column
+
+Let’s start with the img column. There, we want to take the urls and wrap them into <img> tags. Since the reactable output is HTML, this will cause our images to appear from their online source. To create the tags we will need the {htmltools} package.
+
+Further, we’ll adjust the width of that column and get rid of the column name altogether. And just like in the default settings, we have to treat the footer of the table separately.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      )
+    )
+  )
+```
+
+
+##Fix widths of name columns
+
+For the columns state, capital and most_populous_city there’s not much to do. In these cases, we might only want do set the column width.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160)
+    )
+  )
+```
+
+
+##Turn numbers into bubbles
+
+Next, let us change the federal_assembly_votes column. Easy changes will once again involve the header name, the alignment and the width of the column. But that’s not the important part here.
+
+What is important is the fact that we turn the numbers into bubbles. For that all we have to do is to load the {reactablefmtr} package and use its bubble_grid function inside the cell argument.
+
+
+```{r}
+main_color <- '#104E8B' # define a main color
+
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      )
+      
+    )
+  )
+```
+
+Turn numbers into bar charts
+
+Next, we’re going to do a very similar thing with the columns area_km2, pop_million, pop_per_km2. This time, though, we’re going to use the data_bars() function from the {reactablefmtr} package.
+
+This will involve having to call data_bars() more or less three times with mostly the same arguments. Thus, I wrap the logic into a function to avoid a bit of code duplication.
+
+
+```{r}
+bar_chart <- function(column) {
+  formatting_function <- if (column == 'area_km2') {
+    scales::label_number(
+      suffix = ' km²',
+      big.mark = ','
+    )
+  } else {
+    scales::label_comma(
+      accuracy = if (column == 'pop_per_km2') 1 else 0.01
+    )
+  }
+  
+  bar_max_value <- if (column %in% c('area_km2', 'pop_million')) {
+    german_stats[[17, column]]
+  } else {
+    NULL
+  }
+  data_bars(
+    data = german_stats_wo_total |> select(any_of(column)),
+    text_position = 'above',
+    bar_height = 20,
+    number_fmt = formatting_function,
+    fill_color = main_color,
+    max_value = bar_max_value
+  )
+}
+```
+
+
+With that function we can modify the cell argument of the corresponding columns. And while we’re at it, we can also fix the width, alignment and footer of these columns.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      ),
+      
+      area_km2 = colDef(
+        header = 'Area',
+        align = 'left',
+        cell = bar_chart('area_km2'),
+        width = 110,
+        footer = function(value) {
+          german_stats$area_km2[17] |> 
+            scales::label_number(
+              suffix = ' km²',
+              big.mark = ','
+            )()
+        }
+      ),
+      pop_million = colDef(
+        header = 'in millions',
+        cell = bar_chart('pop_million'),
+        footer = german_stats$pop_million[[17]] |> 
+          scales::comma(accuracy = 0.01),
+        width = 110
+      ),
+      pop_per_km2 = colDef(
+        header = 'per km²',
+        cell = bar_chart('pop_per_km2'),
+        width = 110
+      )
+      
+      
+      
+    )
+  )
+```
+
+
+Turn numbers into line charts
+
+Sweet! We’re getting somewhere. We have bars and circles already. Time to add sparklines.
+
+This time, I don’t want to use {reactablefmtr} for that. I want to use my own custom charts that I create with {ggplot2}. But there are two problems with that:    {ggplot2} creates static image files that I would have to export and then reimport that into our tables using <img> tags again.
+{ggplot2} charts are not interactive and I want to have hover tool tips.
+
+Thankfully, the solution for both of these problems is one and the same thing. Namely, {ggiraph}. This package is my favorite way to create interactive charts with R. If you’ve never worked with that package, I have a blog post and YT video about that.
+
+Anyway, let’s create a function that depends on a column’s values, row indices and name. We’re going to stick that function into the cell argument of the gdp column. In this function, we can start with a interactive chart without tooltips.
+
+But we have to be careful. Since all charts are drawn separately for each row, we have to ensure that the axes limits are the same for all line charts. That’s where we’ll use scale_y_continuous().
+
+
+
+```{r}
+spark_line <- function(value, row_index, column_name) {
+  years <- 2015:2022
+  
+  # Create static ggplot with `value` vector
+  gg_plt <- ggplot(mapping = aes(x = years, y = value)) +
+    geom_ribbon(
+      aes(
+        x = years[-2],
+        y = NULL, 
+        ymin = 100, 
+        ymax = value[-2]
+      ),
+      alpha = 0.1,
+      fill = main_color
+    ) +
+    geom_line(linewidth = 2, color = main_color) +
+    geom_point(
+      color = main_color,
+      size = 25,
+      na.rm = TRUE
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = 0.1),
+      limits = range(
+        german_stats$gdp |> unlist(), 
+        na.rm = TRUE
+      )
+    ) +
+    theme_void()
+  
+  girafe(
+    ggobj = gg_plt, 
+    width_svg = 16,
+    height = 9,
+    options = list(
+      opts_toolbar(saveaspng = FALSE)
+    )
+  )
+}
+# Example with first row
+spark_line(german_stats$gdp[[1]], NA, NA)
+```
+
+
+So with that, we can define the column settings of the GDP columns and ensure that it uses this function. And as always, we have to treat the footer separately.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      ),
+      
+      area_km2 = colDef(
+        header = 'Area',
+        align = 'left',
+        cell = bar_chart('area_km2'),
+        width = 110,
+        footer = function(value) {
+          german_stats$area_km2[17] |> 
+            scales::label_number(
+              suffix = ' km²',
+              big.mark = ','
+            )()
+        }
+      ),
+      pop_million = colDef(
+        header = 'in millions',
+        cell = bar_chart('pop_million'),
+        footer = german_stats$pop_million[[17]] |> 
+          scales::comma(accuracy = 0.01),
+        width = 110
+      ),
+      pop_per_km2 = colDef(
+        header = 'per km²',
+        cell = bar_chart('pop_per_km2'),
+        width = 110
+      ),
+      
+      gdp = colDef(
+        header = div(
+          'GDP ',
+          span(
+            style = htmltools::css(
+              font_size = '0.75rem'
+            ),
+            '(Index 2015 = 100)'
+          )
+        ),
+        cell = spark_line,
+        footer = \(x) spark_line(
+          german_stats$gdp[[17]], NA, NA
+        ),
+        width = 160
+      )
+      
+      
+    )
+  )
+```
+
+
+##Add tooltips to spark lines
+
+Now, to make the chart more interesting, we can compute the year-on-year change of the GPD (if possible) and show that in tooltips.
+
+```{r}
+spark_line <- function(value, row_index, column_name) {
+  years <- 2015:2022
+  rel_diff <- value / lag(value) - 1
+  texts <- if_else(
+    is.na(rel_diff),
+    '',
+    scales::percent(rel_diff, accuracy = 0.01)
+  )
+  text_color <- if_else(
+    rel_diff < 0, 
+    '#BF1363', 
+    '#06A77D'
+  )
+  
+  compare_texts <- map(
+    seq_along(texts),
+    \(x) {
+      if (!is.na(value[[x]])) {
+        div(
+          style = css(
+            width = '250px',
+          ),
+          div(
+            style = htmltools::css(
+              font_weight = 600
+            ),
+            glue::glue(
+              'GPD in {years[x]}:'
+            )
+          ),
+          div(
+            value[x],
+            if (texts[[x]] != '') {
+                span(
+                  style = htmltools::css(
+                    font_size = '1rem'
+                  ),
+                  '(',
+                  span(
+                    style = htmltools::css(
+                      color = text_color[x],
+                      font_weight = 600
+                    ),
+                    texts[x]
+                  ),
+                  span(
+                    ', year-on-year)'
+                  )
+                )
+            }
+          )
+        ) |> as.character()
+      } else {
+        ''
+      }
+    }
+  )
+  
+  gg_plt <- ggplot(mapping = aes(x = years, y = value)) +
+    geom_ribbon(
+      aes(
+        x = years[-2],
+        y = NULL, ymin = 100, ymax = value[-2]),
+      alpha = 0.1,
+      fill = main_color
+    ) +
+    geom_line(linewidth = 2, color = main_color) +
+    geom_point_interactive(
+      aes(
+        tooltip = compare_texts
+      ),
+      color = main_color,
+      size = 25,
+      na.rm = TRUE
+    ) +
+    scale_y_continuous(
+      expand = expansion(mult = 0.1),
+      limits = range(
+        german_stats$gdp |> unlist(),
+        na.rm = TRUE
+      )
+    ) +
+    theme_void()
+  
+  girafe(
+    ggobj = gg_plt, 
+    width_svg = 16,
+    height = 9,
+    options = list(
+      opts_toolbar(saveaspng = FALSE),
+      opts_tooltip(
+        opacity = 1,
+        css = girafe_css(
+          css = htmltools::css(
+            color = 'black',
+            background = 'white',
+            padding = '15px',
+            font_size = '1.25rem',
+            font_family = '"Source Sans Pro", Courier',
+            border = glue::glue('2px solid {main_color}'),
+            border_radius = '5px'
+          )
+        )
+      )
+    )
+  )
+}
+spark_line(german_stats$gdp[[1]], NA, NA)
+```
+
+
+And now we just have to re-execute the code from before.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      ),
+      
+      area_km2 = colDef(
+        header = 'Area',
+        align = 'left',
+        cell = bar_chart('area_km2'),
+        width = 110,
+        footer = function(value) {
+          german_stats$area_km2[17] |> 
+            scales::label_number(
+              suffix = ' km²',
+              big.mark = ','
+            )()
+        }
+      ),
+      pop_million = colDef(
+        header = 'in millions',
+        cell = bar_chart('pop_million'),
+        footer = german_stats$pop_million[[17]] |> 
+          scales::comma(accuracy = 0.01),
+        width = 110
+      ),
+      pop_per_km2 = colDef(
+        header = 'per km²',
+        cell = bar_chart('pop_per_km2'),
+        width = 110
+      ),
+      
+      gdp = colDef(
+        header = div(
+          'GDP ',
+          span(
+            style = htmltools::css(
+              font_size = '0.75rem'
+            ),
+            '(Index 2015 = 100)'
+          )
+        ),
+        cell = spark_line,
+        footer = \(x) spark_line(
+          german_stats$gdp[[17]], NA, NA
+        ),
+        width = 160
+      )
+      
+      
+    )
+  )
+```
+
+
+
+##Add column groups and nicer font
+
+Phew, that was hard, wasn’t it? Let’s throw in something easy in between. You can think of it as a little break if you want.
+
+Anyway, what we do now is to add a group label for the population columns. And we can add a nicer font.
+
+```{r}
+german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 65,
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        }
+      ),
+
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      ),
+      
+      area_km2 = colDef(
+        header = 'Area',
+        align = 'left',
+        cell = bar_chart('area_km2'),
+        width = 110,
+        footer = function(value) {
+          german_stats$area_km2[17] |> 
+            scales::label_number(
+              suffix = ' km²',
+              big.mark = ','
+            )()
+        }
+      ),
+      pop_million = colDef(
+        header = 'in millions',
+        cell = bar_chart('pop_million'),
+        footer = german_stats$pop_million[[17]] |> 
+          scales::comma(accuracy = 0.01),
+        width = 110
+      ),
+      pop_per_km2 = colDef(
+        header = 'per km²',
+        cell = bar_chart('pop_per_km2'),
+        width = 110
+      ),
+      
+      gdp = colDef(
+        header = div(
+          'GDP ',
+          span(
+            style = htmltools::css(
+              font_size = '0.75rem'
+            ),
+            '(Index 2015 = 100)'
+          )
+        ),
+        cell = spark_line,
+        footer = \(x) spark_line(
+          german_stats$gdp[[17]], NA, NA
+        ),
+        width = 160
+      )
+    ),
+    columnGroups = list(
+      colGroup(
+        name = 'Population',
+        columns = c('pop_million', 'pop_per_km2')
+      )
+    ),
+    style = htmltools::css(
+      font_family = '"Source Sans Pro", sans-serif'
+    )
+  )
+```
+
+Create state maps
+
+Nice! The rows of the table are complete. Now it’s time to create the folds for the table. This one will contain a map of Germany with the selected state highlighted as well as some information about the state.
+
+Let’s first get the data for the mapss. For that we will use the {giscoR} package. If you’re unfamiliar with that package, I have a tutorial for you.
+
+The data that we’re going to use looks like this:
+
+```{r}
+germany_states <- gisco_get_nuts(
+  year = "2021", 
+  nuts_level = 1,
+  epsg = 3035,
+  country = 'Germany'
+) |> 
+  # Nicer output
+  as_tibble() |> 
+  janitor::clean_names()
+germany_states
+```
+
+
+And then we can use that data to create maps of Germany. Since we need one map for every state, let us wrap the similar logic into a function.
+
+
+```{r}
+create_state_map <- function(selected_state) {
+  plt <- germany_states |> 
+    ggplot(
+      aes(
+        geometry = geometry,
+        fill = (name_latn == selected_state)
+      )
+    ) +
+    geom_sf(col = 'white', linewidth = 0.75) +
+    theme_void() +
+    theme(
+      legend.position = 'none'
+    ) +
+    scale_fill_manual(
+      values = c(
+        'TRUE' = main_color,
+        'FALSE' = 'grey50'
+      )
+    )
+  girafe(
+    ggobj = plt,
+    options = list(
+      opts_toolbar(saveaspng = FALSE)
+    )
+  )
+}
+create_state_map(german_stats$state[[1]])
+```
+
+##Assemble state descriptions
+
+Since we’re going to use our new function in the details argument of img column’s colDef() function, we have to make sure that this new function depends on the row_index and the col_name.
+
+```{r}
+state_details <- function(row_index, col_name) {
+  state_name <- german_stats[[row_index, 'state']]
+
+  div(
+    style = htmltools::css(
+      display = 'grid',
+      grid_template_columns = '1fr 2fr',
+      row_gap = '10px', 
+      padding = '10px 50px 10px 50px'
+    ),
+    div(
+      create_state_map(state_name)
+    ),
+    div(
+      style = css(
+        font_family = 'Source Sans Pro',
+        font_size = '1.25rem'
+      ),
+      
+      span(
+        a(
+          # `state_urls` contains URLs to a state's Wiki page
+          href = "state_urls[row_index]",
+          style = css(
+            color = main_color,
+            text_decoration = 'none',
+            font_weight = 600
+          ),
+          'From Wikipedia: '
+        ),
+        state_descriptions[row_index]
+      )
+    )
+  ) 
+}
+
+state_details(1, '') |> 
+  htmltools::browsable()
+```
+
+
+##Include state description
+
+```{r}
+tbl_wo_titles <- german_stats_wo_total |> 
+  reactable(
+    pagination = FALSE,
+    
+    defaultColDef = colDef(
+      vAlign = 'center',
+      align = 'left',
+      header = \(x) str_replace_all(x, '_', ' ') |> 
+        str_to_title(),
+      headerStyle = htmltools::css(
+        font_weight = 600,
+        border_bottom = '2px solid black'
+      ),
+      footer = function(values, col_name) {
+        german_stats[[17, col_name]]
+      },
+      footerStyle = htmltools::css(
+        font_weight = 600,
+        border_top = '2px solid black'
+      )
+    ),
+    
+    columns = list(
+      img = colDef(
+        header = '',
+        width = 100,           #<<< INCREASE WIDTH
+        cell = function(value) {
+          tags$img(
+            src = value,
+            width = 50
+          )
+        },
+        footer = function(value) {
+          tags$img(
+            src = german_stats$img[17],
+            width = 50
+          )
+        },
+        details = state_details #<<< ADD FCT HERE
+      ),
+      
+      state = colDef(width = 125),
+      capital = colDef(width = 115),
+      most_populous_city = colDef(width = 160),
+      
+      federal_assembly_votes = colDef(
+        header = 'Bundesrat Votes',
+        align = 'center',
+        width = 140,
+        cell = bubble_grid(
+          german_stats_wo_total |> 
+            select(federal_assembly_votes),
+          min_value = 1,
+          max_value = 10,
+          colors = c(
+            colorspace::lighten(main_color, 0.9),
+            main_color
+          )
+        )
+      ),
+      
+      area_km2 = colDef(
+        header = 'Area',
+        align = 'left',
+        cell = bar_chart('area_km2'),
+        width = 110,
+        footer = function(value) {
+          german_stats$area_km2[17] |> 
+            scales::label_number(
+              suffix = ' km²',
+              big.mark = ','
+            )()
+        }
+      ),
+      pop_million = colDef(
+        header = 'in millions',
+        cell = bar_chart('pop_million'),
+        footer = german_stats$pop_million[[17]] |> 
+          scales::comma(accuracy = 0.01),
+        width = 110
+      ),
+      pop_per_km2 = colDef(
+        header = 'per km²',
+        cell = bar_chart('pop_per_km2'),
+        width = 110
+      ),
+      
+      gdp = colDef(
+        header = div(
+          'GDP ',
+          span(
+            style = htmltools::css(
+              font_size = '0.75rem'
+            ),
+            '(Index 2015 = 100)'
+          )
+        ),
+        cell = spark_line,
+        footer = \(x) spark_line(
+          german_stats$gdp[[17]], NA, NA
+        ),
+        width = 160
+      )
+    ),
+    columnGroups = list(
+      colGroup(
+        name = 'Population',
+        columns = c('pop_million', 'pop_per_km2')
+      )
+    ),
+    style = htmltools::css(
+      font_family = '"Source Sans Pro", sans-serif'
+    )
+  )
+tbl_wo_titles
+```
+
+##Add title & subtitle
+
+Finally, all that’s left to do is to add a title and subtitle to the table. For that we just have to wrap our variable that contains the table into a div container and place the title and sub-title containers on top of that.
+
+
+```{r}
+final_table <- div(
+  div(
+    style = htmltools::css(
+      font_family = '"Source Sans Pro", sans-serif',
+      font_size = '2rem',
+      font_weight = 'bold'
+    ),
+    'Germany\'s 16 States in Numbers'
+  ),
+  div(
+    style = htmltools::css(
+      font_family = '"Source Sans Pro", sans-serif',
+      font_size = '1.25rem'
+    ),
+    'Based on data from Wikipedia & statistikportal.de'
+  ),
+  tbl_wo_titles
+) 
+final_table |> browsable()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

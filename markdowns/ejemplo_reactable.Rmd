@@ -1,0 +1,200 @@
+---
+title: "Explorando reactable: de iris a empresas y filiales"
+output:
+  html_document:
+    theme: flatly
+    css: styles.css   # opcional; si no existe el archivo, R lo ignora sin error
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+# Paquetes necesarios (instalar si hace falta):
+# install.packages(c("reactable", "dplyr", "htmltools"))
+library(reactable)
+library(dplyr)
+library(htmltools)
+```
+
+## 1. Reactable básico: iris "tal cual"
+
+Lo mínimo. Ya viene con orden por columna, paginación y resaltado al pasar el mouse.
+
+```{r}
+reactable(iris)
+```
+
+## 2. Añadiendo interacción: búsqueda, filtros por columna, tamaño de página
+
+```{r}
+reactable(
+  iris,
+  searchable = TRUE,          # caja de búsqueda global arriba de la tabla
+  filterable = TRUE,          # un input de filtro debajo de cada header
+  defaultPageSize = 10,
+  showPageSizeOptions = TRUE,
+  pageSizeOptions = c(5, 10, 25, 50),
+  highlight = TRUE,           # resalta la fila bajo el cursor
+  striped = TRUE,
+  bordered = TRUE,
+  defaultSorted = "Sepal.Length"
+)
+```
+
+Prueba en el html generado: escribe "setosa" en la búsqueda, o filtra Sepal.Length > 5 en su columna. Todo corre en el navegador, sin servidor.
+
+## 3. Formato condicional (colores según el valor)
+
+Esto es lo que usarás para, por ejemplo, resaltar deuda alta o rentabilidad negativa en rojo.
+
+```{r}
+reactable(
+  iris,
+  columns = list(
+    Sepal.Length = colDef(
+      style = function(value) {
+        # gradiente simple: más oscuro cuanto mayor el valor
+        normalized <- (value - min(iris$Sepal.Length)) / diff(range(iris$Sepal.Length))
+        color <- rgb(colorRamp(c("#e8f4fb", "#2c7fb8"))(normalized), maxColorValue = 255)
+        list(background = color)
+      }
+    ),
+    Species = colDef(
+      cell = function(value) {
+        # renderizado custom: un "badge" de color por especie
+        colores <- c(setosa = "#e63946", versicolor = "#2a9d8f", virginica = "#457b9d")
+        span(
+          style = paste0(
+            "background:", colores[value],
+            "; color:white; padding:2px 8px; border-radius:10px; font-size:12px;"
+          ),
+          value
+        )
+      }
+    )
+  )
+)
+```
+
+## 4. Agrupación con agregados
+
+Útil si luego quieres, por ejemplo, agrupar empresas por país o sector y ver totales.
+
+```{r}
+reactable(
+  iris,
+  groupBy = "Species",
+  columns = list(
+    Sepal.Length = colDef(aggregate = "mean", format = colFormat(digits = 2)),
+    Petal.Length = colDef(aggregate = "max")
+  )
+)
+```
+
+## 5. El caso que te importa: filas expandibles con filiales anidadas
+
+Aquí simulo una estructura análoga a tus objetos R6: una tabla "empresas" (nombre, país, sector, variables financieras) y, por cada empresa, una lista de filiales que se muestra al expandir la fila. La idea es que luego conviertas tu `ListaDeEmpresas` en un data.frame de resumen (una fila por Empresa) y guardes las filiales de cada una en una lista-columna, o las generes on-the-fly a partir del objeto R6 correspondiente.
+
+```{r}
+# --- Datos simulados, con la MISMA forma que tendrán los tuyos ---
+
+empresas <- data.frame(
+  id = 1:4,
+  nombre = c("Grupo Andino S.A.", "TransPacífico Corp", "MinerAustral Ltda", "AgroCono Sur"),
+  pais = c("Ecuador", "Chile", "Perú", "Argentina"),
+  sector = c("Energía", "Logística", "Minería", "Agroindustria"),
+  ingresos_musd = c(1250, 890, 2100, 640),
+  deuda_musd = c(430, 210, 980, 150),
+  stringsAsFactors = FALSE
+)
+
+# Filiales por empresa: en tu caso, esto vendría de empresa$filiales (lista de objetos R6)
+filiales_por_empresa <- list(
+  `1` = data.frame(filial = c("Andino Energía Norte", "Andino Renovables"),
+                    pais = c("Ecuador", "Colombia"),
+                    participacion = c("100%", "65%")),
+  `2` = data.frame(filial = c("TransPacífico Puertos"),
+                    pais = c("Chile"),
+                    participacion = c("100%")),
+  `3` = data.frame(filial = c("MinerAustral Norte", "MinerAustral Exploración", "Austral Trading"),
+                    pais = c("Perú", "Perú", "Panamá"),
+                    participacion = c("80%", "80%", "45%")),
+  `4` = data.frame(filial = character(0), pais = character(0), participacion = character(0))
+)
+
+reactable(
+  empresas,
+  searchable = TRUE,
+  highlight = TRUE,
+  columns = list(
+    id = colDef(show = FALSE),  # lo usamos internamente, no se muestra
+    nombre = colDef(name = "Empresa"),
+    pais = colDef(name = "País", filterable = TRUE),
+    sector = colDef(name = "Sector", filterable = TRUE),
+    ingresos_musd = colDef(name = "Ingresos (MUSD)", format = colFormat(separators = TRUE)),
+    deuda_musd = colDef(
+      name = "Deuda (MUSD)",
+      format = colFormat(separators = TRUE),
+      style = function(value) {
+        if (value > 500) list(color = "#c1121f", fontWeight = "bold") else NULL
+      }
+    )
+  ),
+  details = function(index) {
+    filiales <- filiales_por_empresa[[as.character(empresas$id[index])]]
+    if (nrow(filiales) == 0) {
+      return(div(style = "padding:8px 24px; color:#888;", "Sin filiales registradas"))
+    }
+    div(
+      style = "padding: 8px 24px;",
+      reactable(
+        filiales,
+        columns = list(
+          filial = colDef(name = "Filial"),
+          pais = colDef(name = "País"),
+          participacion = colDef(name = "% Participación")
+        ),
+        outlined = TRUE,
+        fullWidth = TRUE
+      )
+    )
+  }
+)
+```
+
+**Cómo llevarlo a tus objetos R6 reales:** necesitas dos piezas:
+
+1. Un data.frame resumen: una fila por empresa, sacando `nombre`, país, sector y variables financieras de cada objeto `Empresa`. Algo como:
+
+```r
+resumen_empresas <- purrr::map_dfr(lista_empresas$empresas, function(e) {
+  data.frame(
+    id = e$id,
+    nombre = e$nombre,
+    pais = e$pais,
+    sector = e$sector,
+    ingresos_musd = e$variables_financieras$ingresos,
+    deuda_musd = e$variables_financieras$deuda
+  )
+})
+```
+
+2. Una lista nombrada (o función) que, dado el id de la empresa, devuelva el data.frame de sus filiales — exactamente como `filiales_por_empresa` arriba, pero construido desde `e$filiales` (tu lista de objetos R6 Filial).
+
+## 6. Selección de filas (para cuando conectemos con otros widgets)
+
+Esto es un adelanto de lo que usaremos con `crosstalk`: seleccionar una fila aquí podrá resaltar el mismo elemento en un gráfico o mapa.
+
+```{r}
+reactable(
+  empresas,
+  selection = "multiple",
+  onClick = "select",
+  columns = list(
+    id = colDef(show = FALSE),
+    nombre = colDef(name = "Empresa")
+  )
+)
+```
+
+Por ahora la selección no "hace" nada visible fuera de la tabla — eso lo conectamos en el próximo paso con `crosstalk::SharedData`, cuando armemos el gráfico y/o mapa que reaccionen a esta selección.
