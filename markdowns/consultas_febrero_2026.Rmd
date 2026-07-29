@@ -12,6 +12,7 @@ library(visNetwork)
 library(bolt4jr)
 library(reticulate)
 library(readxl)
+library(qs2)
 
 
 use_virtualenv("~/.venvs/neo4j_env", required = TRUE)
@@ -73,7 +74,7 @@ data_2 <- convert_df(result_query_2, field_names = names(result_query_2[[1]]))
 columnas_numericas_2 <- c("empresa.market_cap", "empresa.market_cap_ajustado", "empresa.total_revenue", "empresa.total_revenue_ajustado", "empresa.employees")
 data_2 <- data_2 %>% mutate(across(all_of(columnas_numericas_2), as.numeric))
 
-tabla_info_accionistas <- read_excel("./tablas_input/auxiliares/tabla_info_accionistas.xlsx") %>% 
+tabla_info_accionistas <- read_excel(here::here("tablas_input", "auxiliares", "tabla_info_accionistas.xlsx")) %>% 
                             select(investor_name, ownership_structure, ownership_specific, ownership_family, ownership_multifamily,
                                    principal_activity, finance, country, region
                                    )
@@ -141,9 +142,10 @@ columnas_num <- columnas_num[-3]
 
 data_final <- data_final %>% mutate(across(all_of(columnas_num), \(x) as.numeric(x)))
 
-data_final <- data_final %>% mutate(across(all_of(columnas_num), \(x) ifelse(is.na(x), 0, x)))
+tabla_0 <- data_final %>% mutate(across(all_of(columnas_num), \(x) ifelse(is.na(x), 0, x)))
 
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_0.csv", row.names = FALSE)
+write.csv(tabla_0, file=here::here("export", "tablas", "peticiones_febrero_2026", "tabla_0.csv"), row.names = FALSE)
+qs_save(tabla_0, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_0.qs2"))
       
 
 ```
@@ -202,20 +204,23 @@ data_15 <- data_2 %>% count(empresa.industry_reclassified_2, empresa.country_reg
                         names_glue = "empresas_{empresa.country_region}"
             )
 
-data_final <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified") %>%
+tabla_1 <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified") %>%
                           full_join(data_6, by="empresa.industry_reclassified") %>%
                           full_join(data_7, by="empresa.industry_reclassified") %>%
                           full_join(data_8, by="empresa.industry_reclassified") %>%
                           full_join(data_9, by="empresa.industry_reclassified")
   
-data_final_b <- data_10 %>% full_join(data_11, by="empresa.industry_reclassified_2") %>%
+tabla_1b <- data_10 %>% full_join(data_11, by="empresa.industry_reclassified_2") %>%
                           full_join(data_12, by="empresa.industry_reclassified_2") %>%
                           full_join(data_13, by="empresa.industry_reclassified_2") %>%
                           full_join(data_14, by="empresa.industry_reclassified_2") %>%
                           full_join(data_15, by="empresa.industry_reclassified_2")
 
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_1.csv", row.names = FALSE)
-write.csv(data_final_b, file="./export/tablas/peticiones_febrero_2026/tabla_1b.csv", row.names = FALSE)
+write.csv(tabla_1, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_1.csv"), row.names = FALSE)
+write.csv(tabla_1b, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_1b.csv"), row.names = FALSE)
+qs_save(tabla_1, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_1.qs2"))
+qs_save(tabla_1b, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_1b.qs2"))
+
 ```
 
 Tabla 2: En las filas, los países de las 300 empresas (columna B de la tabla: empresa.country_region). En las columnas: (i) number of companies per sector (en total han de ser 300), (ii) cantidad de ellas que son familiares, (iii) market capitalization per country, (iv) revenues per country and (v) employees totales y desagregados por sector (cada columna, la cantidad de empleados de cada sector por país).
@@ -249,12 +254,14 @@ data_7 <- data_2 %>% count(empresa.country_region, empresa.industry_reclassified
                           names_glue = "industry_reclassified_{empresa.industry_reclassified}"
                           )
 
-data_final <- data_4 %>% full_join(data_5, by="empresa.country_region") %>%
+tabla_2 <- data_4 %>% full_join(data_5, by="empresa.country_region") %>%
                           full_join(data_6, by="empresa.country_region") %>%
                           full_join(data_7, by="empresa.country_region")
 
 
-write.csv(data_1, file="./export/tablas/peticiones_febrero_2026/tabla_2.csv", row.names = FALSE)
+write.csv(tabla_2, file= here::here("export", "tablas", "peticiones_febrero_2026", "tabla_2.csv"), row.names = FALSE)
+qs_save(tabla_2, file= here::here("export", "tablas", "peticiones_febrero_2026", "tabla_2.qs2"))
+
 ```
 
 Tabla 3. Solo 2 filas: empresas familiares y empresas no familiares. Y en las columnas, el despliegue de países en las que están cada uno, así como columnas de los sectores en los que se encuentran. Cada columna (país y sector) con una columna al lado de empresa.market.cap (columna H)
@@ -287,11 +294,13 @@ data_6 <- data_2 %>% count(empresa.grupo_familiar, empresa.industry_reclassified
                         names_glue = "industry_{empresa.industry_reclassified}"
                         ) 
 
-data_final <- data_4 %>%  full_join(data_5, by="empresa.grupo_familiar") %>% 
+tabla_3 <- data_4 %>%  full_join(data_5, by="empresa.grupo_familiar") %>% 
                           full_join(data_6, by="empresa.grupo_familiar")
 
 
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_3.csv", row.names = FALSE)
+write.csv(tabla_3, file= here::here("export", "tablas", "peticiones_febrero_2026", "tabla_3.csv"), row.names = FALSE)
+qs_save(tabla_3, file= here::here("export", "tablas", "peticiones_febrero_2026", "tabla_3.qs2"))
+
 
 ```
 
@@ -357,15 +366,18 @@ data_10 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accioni
             pivot_wider(names_from = "ownership_structure", values_from = "n", values_fill = 0,
                         names_glue = "ownership_structure_{ownership_structure}")
 
-data_final <- data_4 %>% full_join(data_5, by="tercil") %>%
+tabla_4 <- data_4 %>% full_join(data_5, by="tercil") %>%
                           full_join(data_6, by="tercil") %>%
                           full_join(data_7, by="tercil") %>%
                           full_join(data_8, by="tercil") %>%
                           full_join(data_9, by="tercil") %>%
                           full_join(data_10, by="tercil")
+tabla_4b <- data_3
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_4.csv", row.names = FALSE)
-write.csv(data_3, file="./export/tablas/peticiones_febrero_2026/tabla_4b.csv", row.names = FALSE)
+write.csv(tabla_4, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_4.csv"), row.names = FALSE)
+write.csv(tabla_4b, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_4b.csv"), row.names = FALSE)
+qs_save(tabla_4, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_4.qs2"))
+qs_save(tabla_4b, file = here::here("export", "tablas", "peticiones_febrero_2026", "tabla_4b.qs2"))
 
 ```
 
@@ -425,7 +437,7 @@ data_10 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accioni
             pivot_wider(names_from = "ownership_structure", values_from = "n", values_fill = 0,
                         names_glue = "ownership_structure_{ownership_structure}")
 
-data_final <- data_4 %>% full_join(data_5, by="tercil") %>%
+tabla_5 <- data_4 %>% full_join(data_5, by="tercil") %>%
                           full_join(data_6, by="tercil") %>%
                           full_join(data_7, by="tercil") %>%
                           full_join(data_8, by="tercil") %>%
@@ -433,7 +445,9 @@ data_final <- data_4 %>% full_join(data_5, by="tercil") %>%
                           full_join(data_10, by="tercil")
                           
 
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_5.csv", row.names = FALSE)
+write.csv(tabla_5, file = here::here("export","tablas","peticiones_febrero_2026","tabla_5.csv"), row.names = FALSE)
+qs_save(tabla_5, file = here::here("export","tablas","peticiones_febrero_2026","tabla_5.qs2"))
+
 
 ```
 
@@ -473,11 +487,12 @@ data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "ownership_specific", values_from = "total_market_cap", values_fill = 0,
                               names_glue = "total_market_cap_{ownership_specific}")
 
-data_final <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified_2") %>%
+tabla_6 <- data_4 %>%  full_join(data_5, by="empresa.industry_reclassified_2") %>%
                           full_join(data_6, by="empresa.industry_reclassified_2") %>%
                           full_join(data_7, by="empresa.industry_reclassified_2")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_6.csv", row.names = FALSE)
+write.csv(tabla_6, file = here::here("export","tablas","peticiones_febrero_2026","tabla_6.csv"), row.names = FALSE)
+qs_save(tabla_6, file = here::here("export","tablas","peticiones_febrero_2026","tabla_6.qs2"))
 
 ```
 
@@ -516,11 +531,12 @@ data_7 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "ownership_specific", values_from = "total_market_cap", values_fill = 0,
                               names_glue = "total_market_cap_{ownership_specific}")
 
-data_final <- data_4 %>%  full_join(data_5, by="empresa.country_region") %>%
+tabla_7 <- data_4 %>%  full_join(data_5, by="empresa.country_region") %>%
                           full_join(data_6, by="empresa.country_region") %>%
                           full_join(data_7, by="empresa.country_region")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_7.csv", row.names = FALSE)
+write.csv(tabla_7, file = here::here("export","tablas","peticiones_febrero_2026","tabla_7.csv"), row.names = FALSE)
+qs_save(tabla_7, file = here::here("export","tablas","peticiones_febrero_2026","tabla_7.qs2"))
 
 ```
 Tabla 8: Tabla de fusion 300 y 500.
@@ -570,12 +586,13 @@ data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "total_market_cap_ajustado", values_fill = 0,
                               names_glue = "principal_activity_total_market_cap_ajustado_{principal_activity}")
 
-data_final <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
+tabla_8 <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
                           full_join(data_6, by="ownership_specific") %>%
                           full_join(data_7, by="ownership_specific") %>%
                           full_join(data_8, by="ownership_specific")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_8.csv", row.names = FALSE)
+write.csv(tabla_8, file = here::here("export","tablas","peticiones_febrero_2026","tabla_8.csv"), row.names = FALSE)
+qs_save(tabla_8, file = here::here("export","tablas","peticiones_febrero_2026","tabla_8.qs2"))
 
 ```
 
@@ -623,12 +640,14 @@ data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
                         names_glue = "total_value_{principal_activity}")
 
-data_final <- data_4 %>% full_join(data_5, by="region") %>%
+tabla_9 <- data_4 %>% full_join(data_5, by="region") %>%
                           full_join(data_6, by="region") %>%
                           full_join(data_7, by="region") %>%
                           full_join(data_8, by="region")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_9.csv", row.names = FALSE)
+write.csv(tabla_9, file = here::here("export","tablas","peticiones_febrero_2026","tabla_9.csv"), row.names = FALSE)
+qs_save(tabla_9, file = here::here("export","tablas","peticiones_febrero_2026","tabla_9.qs2"))
+
 
 ```
 
@@ -675,12 +694,13 @@ data_8 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "total_value", values_fill = 0,
                         names_glue = "total_value_{principal_activity}")
 
-data_final <- data_4 %>% full_join(data_5, by="ownership_structure") %>%
+tabla_10 <- data_4 %>% full_join(data_5, by="ownership_structure") %>%
                           full_join(data_6, by="ownership_structure") %>%
                           full_join(data_7, by="ownership_structure") %>%
                           full_join(data_8, by="ownership_structure")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_10.csv", row.names = FALSE)
+write.csv(tabla_10, file = here::here("export","tablas","peticiones_febrero_2026","tabla_10.csv"), row.names = FALSE)
+qs_save(tabla_10, file = here::here("export","tablas","peticiones_febrero_2026","tabla_10.qs2"))
 
 ```
 
@@ -744,7 +764,7 @@ data_11 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
                         names_glue = "total_{principal_activity}")
 
-data_final <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
+tabla_11 <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
                           full_join(data_6, by="ownership_specific") %>%
                           full_join(data_7, by="ownership_specific") %>%
                           full_join(data_8, by="ownership_specific") %>%
@@ -752,7 +772,9 @@ data_final <- data_4 %>%  full_join(data_5, by="ownership_specific") %>%
                           full_join(data_10, by="ownership_specific") %>%
                           full_join(data_11, by="ownership_specific")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_11.csv", row.names = FALSE)
+write.csv(tabla_11, file = here::here("export","tablas","peticiones_febrero_2026","tabla_11.csv"), row.names = FALSE)
+qs_save(tabla_11, file = here::here("export","tablas","peticiones_febrero_2026","tabla_11.qs2"))
+
 ```
 
 Tabla 12: Nueva tabla según Principal Activity.
@@ -802,14 +824,16 @@ data_9 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "region", values_from = "total_value", values_fill = 0,
                         names_glue = "total_value_{region}")
 
-data_final <- data_4 %>%  full_join(data_5, by="principal_activity") %>%
+tabla_12 <- data_4 %>%  full_join(data_5, by="principal_activity") %>%
                           full_join(data_6, by="principal_activity") %>%
                           full_join(data_7, by="principal_activity") %>%
                           full_join(data_8, by="principal_activity") %>%
                           full_join(data_9, by="principal_activity") 
                           
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_12.csv", row.names = FALSE)
+write.csv(tabla_12, file = here::here("export","tablas","peticiones_febrero_2026","tabla_12.csv"), row.names = FALSE)
+qs_save(tabla_12, file = here::here("export","tablas","peticiones_febrero_2026","tabla_12.qs2"))
+
 ```
 
 Tabla 13: Nueva tabla segun Finance.
@@ -869,7 +893,7 @@ data_10 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
                         names_glue = "total_{principal_activity}")
 
-data_final <- data_4 %>%  full_join(data_5, by="finance") %>%
+tabla_13 <- data_4 %>%  full_join(data_5, by="finance") %>%
                           full_join(data_6, by="finance") %>%
                           full_join(data_7, by="finance") %>%
                           full_join(data_8, by="finance") %>%
@@ -877,7 +901,9 @@ data_final <- data_4 %>%  full_join(data_5, by="finance") %>%
                           full_join(data_10, by="finance")
                           
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_13.csv", row.names = FALSE)
+write.csv(tabla_13, file = here::here("export","tablas","peticiones_febrero_2026","tabla_13.csv"), row.names = FALSE)
+qs_save(tabla_13, file = here::here("export","tablas","peticiones_febrero_2026","tabla_13.qs2"))
+
 ```
 
 
@@ -943,7 +969,7 @@ data_11 <- data_2 %>% inner_join(data_3, by = "empresa.name") %>%
             pivot_wider(names_from = "principal_activity", values_from = "n", values_fill = 0,
                         names_glue = "total_{principal_activity}")
 
-data_final <- data_4 %>%  full_join(data_5, by="ownership_family") %>%
+tabla_14 <- data_4 %>%  full_join(data_5, by="ownership_family") %>%
                           full_join(data_6, by="ownership_family") %>%
                           full_join(data_7, by="ownership_family") %>%
                           full_join(data_8, by="ownership_family") %>%
@@ -951,7 +977,8 @@ data_final <- data_4 %>%  full_join(data_5, by="ownership_family") %>%
                           full_join(data_10, by="ownership_family") %>%
                           full_join(data_11, by="ownership_family")
                           
-write.csv(data_final, file="./export/tablas/peticiones_febrero_2026/tabla_14.csv", row.names = FALSE)
+write.csv(tabla_14, file = here::here("export","tablas","peticiones_febrero_2026","tabla_14.csv"), row.names = FALSE)
+qs_save(tabla_14, file = here::here("export","tablas","peticiones_febrero_2026","tabla_14.qs2"))
 
 ```
 

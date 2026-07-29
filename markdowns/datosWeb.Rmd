@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
+knitr::opts_chunk$set(echo = FALSE, include = TRUE, cache = FALSE, results = 'asis', warning = FALSE)
 library(dplyr)
 #library(neo4r)
 library(visNetwork)
@@ -27,7 +27,41 @@ library(reactablefmtr)
 library(ggiraph)
 library(purrr)
 library(giscoR)
+library(scales)
+library(qs2)
+library(tidyr)
+library(plotly)
+library(jsonlite)
+
 ```
+
+```{r}
+tabla_empresas <- qs_read(here::here("export","objetos","tabla_empresas.qs2"))
+tabla_accionistas <- qs_read(here::here("export", "objetos", "tabla_accionistas.qs2"))
+tabla_filiales <- qs_read(here::here("export", "objetos", "tabla_filiales.qs2"))
+tabla_financials_currency <- qs_read(here::here("export", "objetos", "tabla_financials_currency.qs2"))
+tabla_financials_dolares <- qs_read(here::here("export", "objetos", "tabla_financials_dolares.qs2"))
+tabla_financials_dolares_ajustados <- qs_read(here::here("export", "objetos", "tabla_financials_dolares_ajustados.qs2"))
+tabla_0 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_0.qs2"))
+tabla_1 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_1.qs2"))
+tabla_1b <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_1b.qs2"))
+tabla_2 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_2.qs2"))
+tabla_3 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_3.qs2"))
+tabla_4 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_4.qs2"))
+tabla_4b <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_4b.qs2"))
+tabla_5 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_5.qs2"))
+tabla_6 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_6.qs2"))
+tabla_7 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_7.qs2"))
+tabla_8 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_8.qs2"))
+tabla_9 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_9.qs2"))
+tabla_10 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_10.qs2"))
+tabla_11 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_11.qs2"))
+tabla_12 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_12.qs2"))
+tabla_13 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_13.qs2"))
+tabla_14 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_14.qs2"))
+
+```
+
 
 ##Introducción
 
@@ -38,10 +72,423 @@ En esta página mostramos, a modo exploratorio, los datos de las principales emp
 En la siguiente tabla mostramos los datos principales de las empresas latinoamericanas. Puede seleccionar una de ellas para que más abajo se despliegue información adicional sobre sus variables financieras, accionistas y filiales.
 
 ```{r}
-tabla_empresas <- lista_empresas_principales$entidadesTabuladoAgrupado("investor_name")
+source(here::here("scripts", "auxiliares_datosWeb.R"))
+
+
+tabla_empresas <- tabla_empresas[,columnas_tabla_empresas]
+tabla_empresas$total_revenue[tabla_empresas$total_revenue < 0] <- NA
+
+reactable(
+  tabla_empresas,
+  elementId = "tabla_empresas_widget",  # <- id clave para el filtro
+  columns = list(
+    name = colDef(
+      name = "Empresa", 
+      minWidth = 150,
+      filterable = TRUE
+    ),
+    country_region = colDef(
+      name = "País / Región",
+      filterable = TRUE
+    ),
+    
+    industry_reclassified_2 = colDef(
+      name = "Sector",
+      filterable = TRUE,  # necesario para que setFilter funcione, aunque ocultemos el input
+      cell = function(value) {
+        color <- colores_industria[[value]]
+        if (is.null(color)) color <- "#999999"  # color por defecto si el sector no está en la lista
+        
+        htmltools::tags$span(
+          style = sprintf(
+            "background-color:%s; color:white; padding:4px 10px; border-radius:12px;
+             font-size:12px; cursor:pointer; display:inline-block;",
+            color
+          ),
+          onclick = sprintf(
+            "Reactable.setFilter('tabla_empresas_widget', 'industry_reclassified_2', '%s')",
+            value
+          ),
+          value
+        )
+      }
+    ),
+    
+    total_revenue = colDef(
+      name = "Ingresos Totales",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_empresas_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = bar_chart("total_revenue", tabla_empresas, "#3182bd")
+    ),
+    employees = colDef(
+      name = "Empleados",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_empresas_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = data_bars(tabla_empresas, fill_color = "#31a354", background = "#f0f0f0",
+                        text_position = "outside-end", number_fmt = scales::label_comma()),
+    ),
+    market_cap = colDef(
+      name = "Cap. de Mercado",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_empresas_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = bar_chart("market_cap", tabla_empresas, "#3182bd")
+    )
+  ),
+  defaultPageSize = 15,
+  searchable = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  striped = TRUE,
+  compact = TRUE
+)
+
+```
+
+El siguiente gráfico muestra la evolución de las ganancias para las empresas seleccionadas en la tabla.
+
+```{r}
+nombres_metric <- c(total_revenue = "Ingresos totales", market_cap = "Cap. de mercado")
+
+formato_moneda <- function(x) paste0("$", label_number(scale = 1e-6, accuracy = 0.1)(x), "M$")
+
+g1 <- ggplot(
+  tabla_financials_dolares_ajustados %>% filter((variable == "total revenue")|(variable == "market capitalization")),
+  aes(x = anho, y = valor, group = empresa, color = empresa)
+) +
+  geom_line_interactive(aes(data_id = empresa), linewidth = 0.8) +
+  geom_point_interactive(
+    aes(data_id = empresa,
+        tooltip = paste0(empresa, "<br/>", formato_moneda(valor))),
+    size = 1.6
+  ) +
+  scale_y_continuous(labels = formato_moneda) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
+  ) +
+  labs(x = NULL, y = NULL) +
+  facet_wrap_interactive(
+    ~variable,
+    nrow = 1,
+    scales = "free_y",
+    interactive_on = "both",
+    labeller = labeller_interactive(
+      aes(tooltip = paste0(
+        "El gráfico es de ", variable,
+        " con las empresas de la tabla. Puede filtrar la tabla para filtrar los gráficos."
+      ))
+    )
+  )  
+
+g <- g1
+
+htmltools::div(
+  id = "grafico_evolucion_container",
+  girafe(
+    ggobj = g,
+    width_svg = 10, height_svg = 4.5,
+    options = list(
+      opts_hover(css = "stroke-width:2.5; opacity:1;"),
+      opts_hover_inv(css = "opacity:0.15;"),
+      opts_tooltip(css = "background-color:#4a4a4a; color:white; padding:4px 8px; border-radius:4px; font-size:12px;")
+    )
+  )
+)
+
+
+```
 
 
 
+```{=html}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var tabla = document.querySelector("#tabla_empresas_widget");
+  var grafico = document.querySelector("#grafico_evolucion_container");
+
+  function actualizarGrafico() {
+    var filas = tabla.querySelectorAll("tbody tr");
+    if (filas.length === 0) return; // la tabla todavía no se montó, no toques el gráfico
+
+    var visibles = new Set();
+    filas.forEach(function(fila) {
+      var celda = fila.querySelector("td:first-child");
+      if (celda) visibles.add(celda.innerText.trim());
+    });
+
+    if (visibles.size === 0) return; // seguridad extra
+
+    var elementos = grafico.querySelectorAll("[data-id]");
+    elementos.forEach(function(el) {
+      var id = el.getAttribute("data-id");
+      el.style.display = visibles.has(id) ? "" : "none";
+    });
+  }
+
+  var observer = new MutationObserver(actualizarGrafico);
+  observer.observe(tabla, { childList: true, subtree: true });
+  actualizarGrafico();
+});
+</script>
+```
+
+```{r}
+tabla_grafico <- tabla_empresas %>% group_by(country_region, industry_reclassified_2) %>%
+  summarise(total_count = n(),
+          sum_total_revenue = sum(total_revenue, na.rm = TRUE),
+          sum_market_cap = sum(market_cap, na.rm = TRUE),
+          sum_employees = sum(employees, na.rm = TRUE),
+          .groups = "drop"
+          )
+write.csv(tabla_grafico, file=here::here("export","tablas","tabla_grafico.csv"))
+
+tabla_sintesis <- tabla_grafico %>%
+  rename(sector = industry_reclassified_2) %>%
+  mutate(country_region = as.character(country_region),
+         sector = as.character(sector))
+
+variables_num <- c(
+  total_count       = "Nº de empresas",
+  sum_total_revenue = "Ingresos totales",
+  sum_market_cap    = "Capitalización de mercado",
+  sum_employees     = "Empleados"
+)
+
+tabla_completa <- tabla_sintesis %>%
+  tidyr::complete(
+    country_region, sector,
+    fill = list(total_count = 0, sum_total_revenue = 0,
+                sum_market_cap = 0, sum_employees = 0)
+  ) %>%
+  arrange(sector, country_region)
+
+paises   <- sort(unique(tabla_completa$country_region))
+sectores <- sort(unique(tabla_completa$sector))
+
+label_auto <- scales::label_number(scale_cut = scales::cut_short_scale())
+
+construir_y_hovertext <- function(var_col) {
+  var_label <- variables_num[[var_col]]
+  y_list <- list(); hovertext_list <- list()
+  for (pais in paises) {
+    df_pais <- tabla_completa %>%
+      filter(country_region == pais) %>%
+      arrange(match(sector, sectores))
+    y_list[[pais]] <- df_pais[[var_col]]
+    hovertext_list[[pais]] <- paste0(
+      "<b>", pais, "</b><br>",
+      "Sector: ", df_pais$sector, "<br>",
+      var_label, ": ", label_auto(df_pais[[var_col]])
+    )
+  }
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var <- lapply(names(variables_num), construir_y_hovertext)
+names(datos_por_var) <- names(variables_num)
+
+var_inicial <- "total_count"
+id_grafico  <- "grafico_sintesis"
+
+p <- plot_ly() # <-- sin elementId
+
+for (pais in paises) {
+  p <- p %>% add_trace(
+    type = "bar",
+    x = sectores,
+    y = datos_por_var[[var_inicial]]$y[[pais]],
+    hovertext = datos_por_var[[var_inicial]]$hovertext[[pais]],
+    hoverinfo = "text",
+    name = pais,
+    visible = TRUE
+  )
+}
+
+n_trazas   <- length(paises)
+idx_trazas <- 0:(n_trazas - 1)
+
+botones_var <- lapply(names(variables_num), function(v) {
+  list(
+    method = "update",
+    args = list(
+      list(
+        y         = unname(datos_por_var[[v]]$y[paises]),
+        hovertext = unname(datos_por_var[[v]]$hovertext[paises])
+      ),
+      list(
+        `yaxis.title.text` = unname(variables_num[[v]]),
+        `yaxis.autorange`  = TRUE
+      ),
+      idx_trazas
+    ),
+    label = variables_num[[v]]
+  )
+})
+
+p <- p %>% layout(
+  height = 650,
+  barmode = "stack",
+  barnorm = "fraction",
+  margin = list(t = 90, r = 160),  # margen derecho fijo para que la leyenda no "salte" de ancho
+  xaxis = list(title = NULL),
+  yaxis = list(title = variables_num[[var_inicial]], tickformat = ".0%", autorange = TRUE),
+  legend = list(title = list(text = "País / región")),
+  updatemenus = list(
+    list(
+      type = "buttons", direction = "right",
+      x = 0, y = 1.15, xanchor = "left",
+      buttons = botones_var
+    )
+  )
+) %>%
+  config(responsive = TRUE)
+
+htmltools::div(
+  id = "contenedor_grafico_sintesis",
+  style = "position:relative;",
+  p
+)
+
+```
+
+```{r filtro-pais-autocompletar, results='asis', echo=FALSE}
+
+paises_json <- jsonlite::toJSON(paises)
+
+cat(paste0('
+<div id="filtro-pais-container" style="position:absolute; display:none;">
+  <label for="filtro-pais" style="font-size:0.85em;"><strong>País / región: </strong></label><br>
+  <input
+    id="filtro-pais"
+    placeholder="Escribe un país o deja vacío para ver todos"
+    style="padding:4px 8px; width:100%; box-sizing:border-box; border:1px solid #ccc; border-radius:4px;"
+    autocomplete="off"
+  >
+  <div id="sugerencias-pais" style="
+    width:100%; background:white; border:1px solid #ccc; border-top:none;
+    max-height:180px; overflow-y:auto; z-index:10; display:none; box-sizing:border-box;
+  "></div>
+</div>
+
+<script>
+(function() {
+  const contenedor = document.getElementById("contenedor_grafico_sintesis");
+  const grafDiv    = contenedor.querySelector(".plotly.html-widget");
+  const filtroDiv  = document.getElementById("filtro-pais-container");
+
+  // Mueve el div del filtro para que quede DENTRO del contenedor del
+  // gráfico (aunque se generaran en chunks R distintos), así el
+  // position:absolute se calcula relativo al contenedor y no al body.
+  contenedor.appendChild(filtroDiv);
+
+  const paises = ', paises_json, ';
+
+  const input = document.getElementById("filtro-pais");
+  const caja  = document.getElementById("sugerencias-pais");
+
+  function reposicionarFiltro() {
+    const legendNode = grafDiv.querySelector("g.legend");
+    if (!legendNode || !contenedor) return;
+
+    const legendRect = legendNode.getBoundingClientRect();
+    const contRect   = contenedor.getBoundingClientRect();
+
+    filtroDiv.style.top     = (legendRect.bottom - contRect.top + 10) + "px";
+    filtroDiv.style.left    = (legendRect.left   - contRect.left) + "px";
+    filtroDiv.style.width   = legendRect.width + "px";
+    filtroDiv.style.display = "block";
+  }
+
+  function aplicarFiltro(val) {
+    let visible, barnorm, tickformat;
+
+    if (val === "") {
+      visible = paises.map(() => true);
+      barnorm = "fraction";
+      tickformat = ".0%";
+    } else {
+      const idx = paises.findIndex(p => p.toLowerCase() === val.toLowerCase());
+      if (idx === -1) return;
+      visible = paises.map((_, i) => i === idx);
+      barnorm = "";
+      tickformat = "";
+    }
+
+    Plotly.restyle(grafDiv, { visible: visible });
+    Plotly.relayout(grafDiv, {
+      "barnorm": barnorm,
+      "yaxis.tickformat": tickformat,
+      "yaxis.autorange": true
+    });
+  }
+
+  function mostrarSugerencias(val) {
+    caja.innerHTML = "";
+    if (val === "") { caja.style.display = "none"; return; }
+
+    const coincidencias = paises.filter(p =>
+      p.toLowerCase().includes(val.toLowerCase())
+    );
+
+    if (coincidencias.length === 0) { caja.style.display = "none"; return; }
+
+    coincidencias.forEach(pais => {
+      const opcion = document.createElement("div");
+      opcion.textContent = pais;
+      opcion.style.padding = "4px 8px";
+      opcion.style.cursor = "pointer";
+      opcion.addEventListener("mouseenter", () => opcion.style.background = "#f0f0f0");
+      opcion.addEventListener("mouseleave", () => opcion.style.background = "white");
+      opcion.addEventListener("click", () => {
+        input.value = pais;
+        caja.style.display = "none";
+        aplicarFiltro(pais);
+      });
+      caja.appendChild(opcion);
+    });
+
+    caja.style.display = "block";
+  }
+
+  input.addEventListener("input", function(e) {
+    const val = e.target.value.trim();
+    mostrarSugerencias(val);
+    if (val === "") aplicarFiltro("");
+  });
+
+  document.addEventListener("click", function(e) {
+    if (e.target !== input) caja.style.display = "none";
+  });
+
+  // --- Enganche seguro con plotly ---
+  // grafDiv.on() solo existe una vez que plotly terminó de inicializar
+  // el widget, y eso puede tardar (es asíncrono). Sondeamos hasta que
+  // exista, en vez de asumir que ya está listo -- así evitamos que un
+  // error interrumpa el resto del script.
+  window.addEventListener("resize", reposicionarFiltro);
+
+  let intentos = 0;
+  const intervalo = setInterval(function() {
+    intentos++;
+    reposicionarFiltro();
+
+    if (typeof grafDiv.on === "function") {
+      grafDiv.on("plotly_afterplot", reposicionarFiltro);
+      clearInterval(intervalo);
+    } else if (intentos > 20) {
+      clearInterval(intervalo);
+    }
+  }, 200);
+})();
+</script>
+'))
 ```
 
 

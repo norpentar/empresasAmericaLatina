@@ -1973,12 +1973,25 @@ ListaEntidades <- R6Class("ListaEntidades",
     insertNeo4jFinancialsEmpresas = function(){
       lapply(private$.entidades, \(entidad) entidad$insertNeo4jFinancials())
     },
-    tablaFinancialsEmpresas = function(){
+    
+    entidadesFinancialsTabulado = function(tipo){
       tablaEmpresa <- function(empresa){
-        tabla <- empresa$financials
+        tabla <- if(tipo == "currency"){
+          empresa$financials
+        } else if(tipo == "dolares"){
+          empresa$financials_dolares
+        } else if(tipo == "dolares_ajustados"){
+          empresa$financials_dolares_ajustados
+        } else {
+          NULL
+        }
         if(!is.null(tabla)){
           country_region <- empresa$country_region
-          currency <- empresa$currency
+          currency <- if(tipo == "currency"){
+            empresa$currency
+          } else {
+            "USD"
+          }
           tabla <- tabla %>% mutate(country_region=country_region,currency=currency) %>% relocate(empresa,country_region,currency)
         }
         return(tabla)
@@ -2008,9 +2021,33 @@ ListaEntidades <- R6Class("ListaEntidades",
       emp_1 <- self$extraeEntidadesNombre(e1)$entidades
       emp_2 <- self$extraeEntidadesNombre(e2)$entidades
 
-      if(length(emp_1) == 1) emp_1[[1]]$country_region <- "Brazil"
-      if(length(emp_2) == 1) emp_2[[1]]$country_region <- "Peru"
-
+      if(length(emp_1) == 1){
+        emp_1[[1]]$country_region <- "Brazil"
+        emp_1[[1]]$industry <- "Financial & Commodity Market Operators & Service Providers"
+        emp_1[[1]]$industry_reclassified <- "Investment Companies"
+      }  
+      if(length(emp_2) == 1){
+        emp_2[[1]]$country_region <- "Peru"
+        emp_2[[1]]$industry <- "Natural Gas Utilities"
+        emp_2[[1]]$industry_reclassified <- "Utilities"
+      }
+      invisible(self)
+    },
+    
+    rectificaFinancialsEmpresas = function(){
+      emp_1 <- "Energisa Mato Grosso Distribuidora de Energia SA"
+      emp_1 <- self$extraeEntidadesNombre(emp_1)$entidades
+      if(length(emp_1) == 1){
+        emp_1 <- emp_1[[1]]
+        if (!is.null(emp_1$financials)){
+          emp_1$financials[(emp_1$financials$variable == "market capitalization")&(emp_1$financials$anho == "1996"), "valor"] <- NA
+          emp_1$financials[(emp_1$financials$variable == "market capitalization")&(emp_1$financials$anho == "1997"), "valor"] <- NA
+          emp_1$financials_dolares[(emp_1$financials_dolares$variable == "market capitalization")&(emp_1$financials_dolares$anho == "1996"), "valor"] <- NA
+          emp_1$financials_dolares[(emp_1$financials_dolares$variable == "market capitalization")&(emp_1$financials_dolares$anho == "1997"), "valor"] <- NA
+          emp_1$financials_dolares_ajustados[(emp_1$financials_dolares_ajustados$variable == "market capitalization")&(emp_1$financials_dolares_ajustados$anho == "1996"), "valor"] <- NA
+          emp_1$financials_dolares_ajustados[(emp_1$financials_dolares_ajustados$variable == "market capitalization")&(emp_1$financials_dolares_ajustados$anho == "1997"), "valor"] <- NA
+        }
+      }
       invisible(self)
     },
     #esta función carga las currencies según el paíse de las empresas. Es importante que las empresas tengan país definido, si no da error.
@@ -2022,6 +2059,8 @@ ListaEntidades <- R6Class("ListaEntidades",
       }
       invisible(self)
     }
+    
+   
    
   ),
   private = list(
