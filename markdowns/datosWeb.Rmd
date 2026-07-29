@@ -350,6 +350,14 @@ p <- p %>% layout(
 ) %>%
   config(responsive = TRUE)
 
+p <- p %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '650px';
+      if (el.parentElement) { el.parentElement.style.height = '650px'; }
+    }"
+  )
+
 htmltools::div(
   id = "contenedor_grafico_sintesis",
   style = "position:relative;",
