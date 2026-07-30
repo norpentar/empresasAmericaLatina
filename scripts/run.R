@@ -33,11 +33,11 @@ lista_empresas_principales <- procesaFamilias(lista_entidades_principales_in=lis
 lista_empresas_principales <- procesaReclasificaIndustriaEmpresa2(lista_entidades_principales_in=lista_empresas_principales)
 
 #Red
-#lista_red <- lista_empresas_principales$sacaTablasRedListaEntidades(,insertar_neo4j=TRUE)
-#tabla_nodos <- lista_red[[1]]
-#tabla_relaciones_accionistas <- lista_red[[2]]
-#tabla_relaciones_filiales <- lista_red[[3]]
-#lista_nodos <- lista_red[[4]]
+lista_red <- lista_empresas_principales$sacaTablasRedListaEntidades(,insertar_neo4j=TRUE)
+tabla_nodos <- lista_red[[1]]
+tabla_relaciones_accionistas <- lista_red[[2]]
+tabla_relaciones_filiales <- lista_red[[3]]
+lista_nodos <- lista_red[[4]]
 
 #Acá genero las tablas que luego necesitaré en los análisis
 tabla_empresas <- lista_empresas_principales$entidadesTabulado()

@@ -1,6 +1,6 @@
 ---
 title: "Datos Web"
-author: "Iñigo Arrazola"
+author: "Iñigo Arrazola y Manuel Bayón"
 date: "2026-07-25"
 output: html_document
 ---
@@ -63,13 +63,15 @@ tabla_14 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabl
 ```
 
 
-##Introducción
+# Introducción
 
-En esta página mostramos, a modo exploratorio, los datos de las principales empresas latinoamericanas y sus accionistas.
+En esta página queremos ofrecer una mirada exploratoria a los datos procesados sobre las principales empresas de América Latina. Estos datos comprenden los accionistas, las empresas filiales y las variables económicas más importantes de las compañías. La información en bruto fue recolectada de bases de datos corporativas. El modelamiento de los datos se realizó con R, usando el paquete R6 para construir los diferente objetos. Adicionalmente, desde R, los datos procesados fueron volcados a una base no relacional neo4j para poder analizar sus propiedades topológicas.
+
+En la primera sección presentaremos los datos más relevantes de las empresas de manera general. En la segunda sección profundizaremos a través de gráficos, mapas y grafos de síntesis.
 
 #Exploración de las 300 empresas
 
-En la siguiente tabla mostramos los datos principales de las empresas latinoamericanas. Puede seleccionar una de ellas para que más abajo se despliegue información adicional sobre sus variables financieras, accionistas y filiales.
+Esta tabla nos muestra las empresas procesadas. Puede filtrar las columnas con ayuda de los cuadros de texto y los botones interactivos de la tabla.
 
 ```{r}
 source(here::here("scripts", "auxiliares_datosWeb.R"))
@@ -150,7 +152,7 @@ reactable(
 
 ```
 
-El siguiente gráfico muestra la evolución de las ganancias para las empresas seleccionadas en la tabla.
+Estos dos gŕaficos nos muestran la evolución de las variables económicas "Total Revenues" y "Market Capitalization" de las compañías. Las empresas mostradas en el gráficos son las actualmente visibles de la tabla, de modo que si realizas filtros en la misma la información graficada se ajustará a las empresas filtradas. Si tienes varias empresas visibles, puedes seleccionar una de sus líneas para resaltarla y ver su correspondiente línea en el otro gráfico.
 
 ```{r}
 nombres_metric <- c(total_revenue = "Ingresos totales", market_cap = "Cap. de mercado")
@@ -238,8 +240,16 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>
 ```
+# Datos de síntesis
+
+A continuación presentaremos algunos gráficos que sintetizan la información corporativa procesada.
+
+En este gráfico interactivo de barras ilustramos las variables total_count, sum_total_revenue, sum_market_cap y sum_employees de las empresas, agrupadas por sector en el eje horizontal y apiladas por país en las barras. Puede cambiar la variable mostrada en el eje vertical del gráfico con los botones interactivos, así como filtrar un país buscándolo en la caja de texto o haciendo doble click en su icono de la leyenda. De igual manera, al pasar el cursor por una barra se le mostrará resaltada la información apuntada.
 
 ```{r}
+# -----------------------------------------------------------
+# 1. Datos
+# -----------------------------------------------------------
 tabla_grafico <- tabla_empresas %>% group_by(country_region, industry_reclassified_2) %>%
   summarise(total_count = n(),
           sum_total_revenue = sum(total_revenue, na.rm = TRUE),
@@ -294,6 +304,12 @@ construir_y_hovertext <- function(var_col) {
 datos_por_var <- lapply(names(variables_num), construir_y_hovertext)
 names(datos_por_var) <- names(variables_num)
 
+
+# -----------------------------------------------------------
+# 2. Gráfico base — con elementId fijo para poder referenciarlo
+#    desde el JS del buscador de país, y tamaño ampliado
+# -----------------------------------------------------------
+
 var_inicial <- "total_count"
 id_grafico  <- "grafico_sintesis"
 
@@ -314,6 +330,11 @@ for (pais in paises) {
 n_trazas   <- length(paises)
 idx_trazas <- 0:(n_trazas - 1)
 
+# -----------------------------------------------------------
+# 3. Botones de variable 
+# -----------------------------------------------------------
+
+
 botones_var <- lapply(names(variables_num), function(v) {
   list(
     method = "update",
@@ -331,6 +352,10 @@ botones_var <- lapply(names(variables_num), function(v) {
     label = variables_num[[v]]
   )
 })
+
+# -----------------------------------------------------------
+# 4. Layout 
+# -----------------------------------------------------------
 
 p <- p %>% layout(
   height = 650,
