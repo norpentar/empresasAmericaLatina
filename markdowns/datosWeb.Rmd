@@ -2,7 +2,10 @@
 title: "Datos Web"
 author: "Iñigo Arrazola y Manuel Bayón"
 date: "2026-07-25"
-output: html_document
+output:
+  html_document:
+    theme: null
+    df_print: default
 ---
 
 ```{r setup, include=FALSE}
@@ -35,6 +38,148 @@ library(jsonlite)
 
 ```
 
+```{css estilo-general, echo=FALSE}
+/* ============================================================
+   ESTILO VISUAL — paleta y tipografía editorial de datos
+   Todo lo que hay que tocar para cambiar el "look" vive aquí.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --canvas: #f5f4ed;   /* fondo de página, papel cálido en vez de blanco puro */
+  --white:  #ffffff;   /* fondo de tarjetas */
+  --ink:    #1B365D;   /* texto principal / títulos */
+  --ink2:   #3a5278;   /* texto secundario, párrafos de sección */
+  --muted:  #7a8898;   /* metadatos, leyendas, etiquetas de columnas */
+  --accent: #B85C38;   /* color de acento: kickers, bordes de "insight", detalles */
+  --border: #dddbd2;
+  --shadow: 0 1px 6px rgba(27,54,93,.08);
+  --font-s: 'Newsreader', Georgia, serif;   /* titulares */
+  --font-b: 'Inter', system-ui, sans-serif; /* cuerpo de texto */
+  --max: 1080px;
+}
+
+/* ── Reset básico y fondo general ─────────────────────────── */
+* , *::before, *::after { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-b);
+  background: var(--canvas);
+  color: var(--ink2);
+  font-size: 16px;
+  line-height: 1.65;
+  max-width: var(--max);
+  margin: 0 auto;
+  padding: 0 32px 80px;
+}
+
+/* ── Bloque de título que genera rmarkdown (YAML) ─────────── */
+h1.title {
+  font-family: var(--font-s);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.15;
+  margin: 70px 0 6px;
+}
+h4.author, h4.date {
+  font-family: var(--font-b);
+  font-weight: 500;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+/* ── Encabezados de sección (#, ##) ───────────────────────── */
+h1:not(.title) {
+  font-family: var(--font-s);
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 12px;
+  line-height: 1.2;
+}
+h2, h3 {
+  font-family: var(--font-s);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 32px 0 10px;
+}
+p { max-width: 760px; margin: 0 0 16px; }
+
+/* Etiqueta tipo "01 — Los grupos" que va encima de cada título de sección.
+   Se coloca manualmente con un div.section-label antes del encabezado. */
+.section-label {
+  font-family: var(--font-b);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .12em;
+  color: var(--accent);
+  margin: 56px 0 10px;
+}
+
+/* ── Secciones: separador visual entre bloques temáticos ──── */
+.section {
+  border-top: 1px solid var(--border);
+  padding-top: 40px;
+  margin-top: 40px;
+}
+.section:first-of-type { border-top: none; margin-top: 0; }
+
+/* ── Tarjetas: envuelven cada tabla / gráfico interactivo ─── */
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 26px 18px;
+  box-shadow: var(--shadow);
+  margin: 20px 0 28px;
+}
+.card-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+.card-note {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: -6px 0 16px;
+  line-height: 1.55;
+}
+
+/* ── Caja de "insight" / nota metodológica destacada ──────── */
+.insight {
+  background: #fdf8f2;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  padding: 16px 20px;
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: var(--ink2);
+  margin: 16px 0;
+}
+.insight strong { color: var(--ink); }
+
+/* ── Ajustes puntuales para que reactable/plotly/ggiraph
+      encajen visualmente dentro de las tarjetas ──────────── */
+.card .reactable { font-family: var(--font-b); font-size: 0.88rem; }
+.card table.girafe_svg,
+.card .plotly { font-family: var(--font-b) !important; }
+
+/* ── Responsive ────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  body { padding: 0 18px 60px; }
+  .card { padding: 18px 16px 14px; }
+}
+```
+
 ```{r}
 tabla_empresas <- qs_read(here::here("export","objetos","tabla_empresas.qs2"))
 tabla_accionistas <- qs_read(here::here("export", "objetos", "tabla_accionistas.qs2"))
@@ -63,13 +208,23 @@ tabla_14 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabl
 ```
 
 
+```{=html}
+<div class="section">
+```
+
 # Introducción
 
 En esta página queremos ofrecer una mirada exploratoria a los datos procesados sobre las principales empresas de América Latina. Estos datos comprenden los accionistas, las empresas filiales y las variables económicas más importantes de las compañías. La información en bruto fue recolectada de bases de datos corporativas. El modelamiento de los datos se realizó con R, usando el paquete R6 para construir los diferente objetos. Adicionalmente, desde R, los datos procesados fueron volcados a una base no relacional neo4j para poder analizar sus propiedades topológicas.
 
 En la primera sección presentaremos los datos más relevantes de las empresas de manera general. En la segunda sección profundizaremos a través de gráficos, mapas y grafos de síntesis.
 
-#Exploración de las 300 empresas
+```{=html}
+</div>
+<div class="section">
+<div class="section-label">01 — Exploración</div>
+```
+
+# Exploración de las 300 empresas
 
 Esta tabla nos muestra las empresas procesadas. Puede filtrar las columnas con ayuda de los cuadros de texto y los botones interactivos de la tabla.
 
@@ -80,6 +235,9 @@ source(here::here("scripts", "auxiliares_datosWeb.R"))
 tabla_empresas <- tabla_empresas[,columnas_tabla_empresas]
 tabla_empresas$total_revenue[tabla_empresas$total_revenue < 0] <- NA
 
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Empresas — datos generales"),
 reactable(
   tabla_empresas,
   elementId = "tabla_empresas_widget",  # <- id clave para el filtro
@@ -149,6 +307,7 @@ reactable(
   striped = TRUE,
   compact = TRUE
 )
+)
 
 ```
 
@@ -193,6 +352,7 @@ g <- g1
 
 htmltools::div(
   id = "grafico_evolucion_container",
+  class = "card",
   girafe(
     ggobj = g,
     width_svg = 10, height_svg = 4.5,
@@ -240,6 +400,13 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>
 ```
+
+```{=html}
+</div>
+<div class="section">
+<div class="section-label">02 — Síntesis</div>
+```
+
 # Datos de síntesis
 
 A continuación presentaremos algunos gráficos que sintetizan la información corporativa procesada.
@@ -384,9 +551,13 @@ p <- p %>%
   )
 
 htmltools::div(
-  id = "contenedor_grafico_sintesis",
-  style = "position:relative;",
-  p
+  class = "card",
+  htmltools::div(class = "card-title", "Empresas por sector y país/región"),
+  htmltools::div(
+    id = "contenedor_grafico_sintesis",
+    style = "position:relative;",
+    p
+  )
 )
 
 ```
@@ -524,4 +695,6 @@ cat(paste0('
 '))
 ```
 
-
+```{=html}
+</div>
+```
