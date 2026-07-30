@@ -67,8 +67,8 @@ body {
   font-family: var(--font-b);
   background: var(--canvas);
   color: var(--ink2);
-  font-size: 16px;
-  line-height: 1.65;
+  font-size: 17.5px;
+  line-height: 1.7;
   max-width: var(--max);
   margin: 0 auto;
   padding: 0 32px 80px;
@@ -108,7 +108,7 @@ h2, h3 {
   color: var(--ink);
   margin: 32px 0 10px;
 }
-p { max-width: 760px; margin: 0 0 16px; }
+p { margin: 0 0 16px; }
 
 /* Etiqueta tipo "01 — Los grupos" que va encima de cada título de sección.
    Se coloca manualmente con un div.section-label antes del encabezado. */
@@ -313,93 +313,181 @@ reactable(
 
 Estos dos gŕaficos nos muestran la evolución de las variables económicas "Total Revenues" y "Market Capitalization" de las compañías. Las empresas mostradas en el gráficos son las actualmente visibles de la tabla, de modo que si realizas filtros en la misma la información graficada se ajustará a las empresas filtradas. Si tienes varias empresas visibles, puedes seleccionar una de sus líneas para resaltarla y ver su correspondiente línea en el otro gráfico.
 
-```{r}
-nombres_metric <- c(total_revenue = "Ingresos totales", market_cap = "Cap. de mercado")
+```{r grafico-evolucion, echo=FALSE}
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
 
-formato_moneda <- function(x) paste0("$", label_number(scale = 1e-6, accuracy = 0.1)(x), "M$")
+# Datos largo: una fila por empresa/año/variable, ya en dólares ajustados
+datos_lineas <- tabla_financials_dolares_ajustados %>%
+  filter(variable %in% c("total revenue", "market capitalization")) %>%
+  mutate(valor_fmt = formato_moneda(valor))
 
-g1 <- ggplot(
-  tabla_financials_dolares_ajustados %>% filter((variable == "total revenue")|(variable == "market capitalization")),
-  aes(x = anho, y = valor, group = empresa, color = empresa)
-) +
-  geom_line_interactive(aes(data_id = empresa), linewidth = 0.8) +
-  geom_point_interactive(
-    aes(data_id = empresa,
-        tooltip = paste0(empresa, "<br/>", formato_moneda(valor))),
-    size = 1.6
-  ) +
-  scale_y_continuous(labels = formato_moneda) +
-  theme_minimal() +
-  theme(
-    legend.position = "none",
-    axis.text.x = element_text(angle = 45, hjust = 1, size = 8)
-  ) +
-  labs(x = NULL, y = NULL) +
-  facet_wrap_interactive(
-    ~variable,
-    nrow = 1,
-    scales = "free_y",
-    interactive_on = "both",
-    labeller = labeller_interactive(
-      aes(tooltip = paste0(
-        "El gráfico es de ", variable,
-        " con las empresas de la tabla. Puede filtrar la tabla para filtrar los gráficos."
-      ))
+# Universo de empresas y un color estable por empresa (mismo color en las dos facetas)
+empresas_orden  <- sort(unique(tabla_empresas$name))
+n_empresas      <- length(empresas_orden)
+colores_empresa <- setNames(scales::hue_pal()(n_empresas), empresas_orden)
+
+# Construye una faceta (un gráfico plot_ly independiente) con una traza por empresa,
+# manteniendo SIEMPRE el mismo número y orden de trazas que "empresas_orden"
+# (incluso si a alguna empresa le faltan datos), para que los índices de traza
+# coincidan entre las dos facetas y el JS pueda enlazarlas por posición.
+construir_facet <- function(var_col, var_label) {
+  df_var <- datos_lineas %>% filter(variable == var_col)
+  p <- plot_ly()
+  for (emp in empresas_orden) {
+    d <- df_var %>% filter(empresa == emp) %>% arrange(anho)
+    if (nrow(d) == 0) {
+      d <- tibble::tibble(anho = numeric(0), valor = numeric(0), valor_fmt = character(0))
+    }
+    p <- p %>% add_trace(
+      data = d,
+      x = ~anho, y = ~valor,
+      type = "scatter", mode = "lines+markers",
+      name = emp,
+      showlegend = FALSE,
+      line   = list(color = colores_empresa[[emp]], width = 1.6),
+      marker = list(color = colores_empresa[[emp]], size = 5),
+      customdata = ~valor_fmt,
+      hovertemplate = paste0(
+        "<b>%{fullData.name}</b><br>", var_label, ": %{customdata}<br>Año: %{x}<extra></extra>"
+      )
     )
-  )  
+  }
+  p
+}
 
-g <- g1
+p_revenue   <- construir_facet("total revenue", "Ingresos totales")
+p_marketcap <- construir_facet("market capitalization", "Cap. de mercado")
+
+# Eje X compartido: años 1990-2024, letra pequeña y angulada para que no se solapen
+eje_x <- list(
+  title = "", tickangle = -45, tickfont = list(size = 9),
+  dtick = 2, range = c(1989.3, 2024.7)
+)
+
+fig <- subplot(p_revenue, p_marketcap, nrows = 1, margin = 0.07) %>%
+  layout(
+    showlegend = FALSE,
+    hovermode = "closest",
+    margin = list(t = 44, b = 60),
+    annotations = list(
+      list(text = "Ingresos totales", x = 0.16, y = 1.08, xref = "paper", yref = "paper",
+           showarrow = FALSE, font = list(size = 13, color = "#1B365D", family = "Inter, sans-serif")),
+      list(text = "Capitalización de mercado", x = 0.84, y = 1.08, xref = "paper", yref = "paper",
+           showarrow = FALSE, font = list(size = 13, color = "#1B365D", family = "Inter, sans-serif"))
+    ),
+    xaxis  = eje_x,
+    xaxis2 = eje_x,
+    yaxis  = list(title = "", tickformat = "$,.2s"),
+    yaxis2 = list(title = "", tickformat = "$,.2s")
+  ) %>%
+  config(displayModeBar = FALSE, responsive = TRUE)
 
 htmltools::div(
   id = "grafico_evolucion_container",
   class = "card",
-  girafe(
-    ggobj = g,
-    width_svg = 10, height_svg = 4.5,
-    options = list(
-      opts_hover(css = "stroke-width:2.5; opacity:1;"),
-      opts_hover_inv(css = "opacity:0.15;"),
-      opts_tooltip(css = "background-color:#4a4a4a; color:white; padding:4px 8px; border-radius:4px; font-size:12px;")
-    )
-  )
+  fig
 )
-
-
 ```
 
+```{r indices-empresas, results='asis', echo=FALSE}
+# Mapa empresa -> [índice de su traza en faceta 1, índice en faceta 2].
+# Se genera en R (donde conocemos el orden real de las trazas) y se vuelca
+# como JSON para que el JS de sincronización no tenga que adivinarlo.
+mapa_indices <- setNames(
+  lapply(seq_along(empresas_orden), function(i) c(i - 1L, i - 1L + n_empresas)),
+  empresas_orden
+)
+mapa_indices_json <- jsonlite::toJSON(mapa_indices, auto_unbox = TRUE)
 
+cat(paste0('
+<script>
+window.MAPA_INDICES_EMPRESAS = ', mapa_indices_json, ';
+</script>
+'))
+```
 
 ```{=html}
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-  var tabla = document.querySelector("#tabla_empresas_widget");
+  var tabla   = document.querySelector("#tabla_empresas_widget");
   var grafico = document.querySelector("#grafico_evolucion_container");
+  var mapa    = window.MAPA_INDICES_EMPRESAS || {};
 
-  function actualizarGrafico() {
-    var filas = tabla.querySelectorAll("tbody tr");
-    if (filas.length === 0) return; // la tabla todavía no se montó, no toques el gráfico
+  // Lista plana con todos los índices de traza (de las dos facetas)
+  var todosIdx = [];
+  Object.keys(mapa).forEach(function(emp) {
+    mapa[emp].forEach(function(i) { todosIdx.push(i); });
+  });
+
+  var grafDiv = null;
+  var listo   = false;
+
+  function actualizarVisibilidad() {
+    if (!grafDiv || !tabla) return;
+    var filas = tabla.querySelectorAll(".rt-tbody .rt-tr");
+    if (filas.length === 0) return; // la tabla todavía no se montó
 
     var visibles = new Set();
     filas.forEach(function(fila) {
-      var celda = fila.querySelector("td:first-child");
+      var celda = fila.querySelector(".rt-td");
       if (celda) visibles.add(celda.innerText.trim());
     });
+    if (visibles.size === 0) return;
 
-    if (visibles.size === 0) return; // seguridad extra
+    // Por si quedó una línea resaltada de un hover anterior
+    Plotly.restyle(grafDiv, { opacity: 1, "line.width": 1.6 }, todosIdx);
 
-    var elementos = grafico.querySelectorAll("[data-id]");
-    elementos.forEach(function(el) {
-      var id = el.getAttribute("data-id");
-      el.style.display = visibles.has(id) ? "" : "none";
+    var visArray = new Array(todosIdx.length);
+    Object.keys(mapa).forEach(function(emp) {
+      var visible = visibles.has(emp);
+      mapa[emp].forEach(function(idx) { visArray[idx] = visible; });
+    });
+
+    Plotly.restyle(grafDiv, { visible: visArray }, todosIdx);
+    Plotly.relayout(grafDiv, {
+      "xaxis.autorange": true, "yaxis.autorange": true, "yaxis2.autorange": true
     });
   }
 
-  var observer = new MutationObserver(actualizarGrafico);
+  function resaltar(emp) {
+    var idxHighlight = mapa[emp] || [];
+    var idxResto = todosIdx.filter(function(i) { return idxHighlight.indexOf(i) === -1; });
+    if (idxResto.length)     Plotly.restyle(grafDiv, { opacity: 0.15 }, idxResto);
+    if (idxHighlight.length) Plotly.restyle(grafDiv, { opacity: 1, "line.width": 3 }, idxHighlight);
+  }
+
+  function quitarResalte() {
+    Plotly.restyle(grafDiv, { opacity: 1, "line.width": 1.6 }, todosIdx);
+  }
+
+  // grafDiv.on() solo existe cuando Plotly termina de montar el widget
+  // (es asíncrono), así que sondeamos hasta que esté disponible.
+  var intentos = 0;
+  var intervalo = setInterval(function() {
+    intentos++;
+    if (!grafDiv) grafDiv = grafico.querySelector(".plotly.html-widget");
+    if (grafDiv && typeof grafDiv.on === "function") {
+      listo = true;
+      actualizarVisibilidad(); // aplica página 1 / filtro inicial de la tabla
+      grafDiv.on("plotly_hover", function(ev) {
+        if (ev.points && ev.points.length) resaltar(ev.points[0].data.name);
+      });
+      grafDiv.on("plotly_unhover", quitarResalte);
+      clearInterval(intervalo);
+    } else if (intentos > 40) {
+      clearInterval(intervalo);
+    }
+  }, 150);
+
+  var observer = new MutationObserver(function() {
+    if (listo) actualizarVisibilidad();
+  });
   observer.observe(tabla, { childList: true, subtree: true });
-  actualizarGrafico();
 });
 </script>
 ```
+
+
 
 ```{=html}
 </div>
@@ -694,6 +782,12 @@ cat(paste0('
 </script>
 '))
 ```
+
+En la siguiente tabla mostramos a las em
+
+
+
+
 
 ```{=html}
 </div>

@@ -7,7 +7,7 @@ library(readxl)
 
 #Archivo con variables y funciones auxiliares para el markdown que genera los datos en formato html
 
-columnas_tabla_empresas <- c("name", "country_region", "total_revenue", "employees", "market_cap", "industry", "industry_reclassified", "industry_reclassified_2")
+columnas_tabla_empresas <- c("name", "country_region", "industry_reclassified_2", "total_revenue", "employees", "market_cap")
 variables_financieras_seleccionadas <- c("total revenue", "market capitalization", "total assets")
 
 
