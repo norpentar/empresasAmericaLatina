@@ -173,6 +173,26 @@ p { margin: 0 0 16px; }
 .card table.girafe_svg,
 .card .plotly { font-family: var(--font-b) !important; }
 
+/* ── Controles: botones toggle y cajas de selección ───────── */
+.toggle-btn {
+  font-family: var(--font-b);
+  font-size: 0.82rem; font-weight: 500;
+  padding: 6px 14px;
+  border: 1px solid var(--border); border-radius: 20px;
+  background: var(--white); color: var(--ink2); cursor: pointer;
+  transition: all .15s;
+}
+.toggle-btn:hover { border-color: var(--ink2); color: var(--ink); }
+.toggle-btn.active { background: var(--ink); color: var(--white); border-color: var(--ink); }
+
+.select-box {
+  font-family: var(--font-b);
+  font-size: 0.85rem; padding: 7px 12px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--white); color: var(--ink); cursor: pointer;
+  min-width: 200px;
+}
+
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 720px) {
   body { padding: 0 18px 60px; }
@@ -205,6 +225,22 @@ tabla_12 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabl
 tabla_13 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_13.qs2"))
 tabla_14 <- qs_read(here::here("export","tablas","peticiones_febrero_2026","tabla_14.qs2"))
 
+tabla_paises_variables_num <- tabla_empresas %>% group_by(country_region) %>%
+  summarise(
+    total_count = n(),
+    sum_total_revenue = sum(total_revenue, na.rm = TRUE),
+    sum_market_cap = sum(market_cap, na.rm = TRUE),
+    sum_employees = sum(employees, na.rm = TRUE),
+    .groups = "drop"
+  )
+tabla_paises_variables_num_sector <- tabla_empresas %>% group_by(country_region, industry_reclassified_2) %>%
+  summarise(
+    total_count = n(),
+    sum_total_revenue = sum(total_revenue, na.rm = TRUE),
+    sum_market_cap = sum(market_cap, na.rm = TRUE),
+    sum_employees = sum(employees, na.rm = TRUE),
+    .groups = "drop"
+  )
 ```
 
 
@@ -783,8 +819,172 @@ cat(paste0('
 '))
 ```
 
-En la siguiente tabla mostramos a las em
+Este mapa muestra, por país, el número de empresas o el total de alguna variable económica de la tabla de síntesis. Usa los botones para cambiar la variable y la caja de selección para filtrar por sector.
 
+```{r mapa-sintesis, echo=FALSE}
+# Normalización de nombres de país para que coincidan con el atlas de
+# países que usa Plotly (locationmode = "country names"). Si aparece
+# algún país sin colorear en el mapa, probablemente su nombre en
+# `country_region` no coincide exactamente con el atlas -- se añade
+# aquí su corrección.
+normaliza_pais_mapa <- c("United States of America" = "United States")
+
+tabla_mapa_base <- tabla_paises_variables_num_sector %>%
+  rename(sector = industry_reclassified_2) %>%
+  mutate(country_region = dplyr::recode(country_region, !!!normaliza_pais_mapa))
+
+sectores <- sort(unique(tabla_mapa_base$sector))
+paises_mapa <- sort(unique(tabla_mapa_base$country_region))
+
+formato_valor_mapa <- list(
+  total_count       = scales::label_comma(),
+  sum_total_revenue = formato_moneda,
+  sum_market_cap    = formato_moneda,
+  sum_employees     = scales::label_comma()
+)
+
+# Para cada variable numérica, precalculamos el vector z + hovertext
+# tanto para "Todos los sectores" (sumando entre sectores) como para
+# cada sector individual, siempre alineados con `paises_mapa`.
+construir_datos_mapa <- function(var_col) {
+  fmt       <- formato_valor_mapa[[var_col]]
+  var_label <- variables_num[[var_col]]
+
+  todos <- tabla_mapa_base %>%
+    group_by(country_region) %>%
+    summarise(valor = sum(.data[[var_col]], na.rm = TRUE), .groups = "drop")
+  todos <- todos[match(paises_mapa, todos$country_region), ]
+
+  lista <- list(
+    "Todos los sectores" = list(
+      z = todos$valor,
+      hovertext = paste0("<b>", paises_mapa, "</b><br>Todos los sectores<br>",
+                          var_label, ": ", fmt(todos$valor))
+    )
+  )
+
+  for (sec in sectores) {
+    df_sec <- tabla_mapa_base %>% filter(sector == sec)
+    df_sec <- df_sec[match(paises_mapa, df_sec$country_region), ]
+    valores <- df_sec[[var_col]]
+    lista[[sec]] <- list(
+      z = valores,
+      hovertext = paste0("<b>", paises_mapa, "</b><br>", sec, "<br>",
+                          var_label, ": ", fmt(valores))
+    )
+  }
+  lista
+}
+
+datos_mapa <- lapply(names(variables_num), construir_datos_mapa)
+names(datos_mapa) <- names(variables_num)
+
+var_inicial_mapa    <- "total_count"
+sector_inicial_mapa <- "Todos los sectores"
+
+mapa_mundial <- plot_ly(
+  type = "choropleth",
+  locations = paises_mapa,
+  locationmode = "country names",
+  z = datos_mapa[[var_inicial_mapa]][[sector_inicial_mapa]]$z,
+  text = datos_mapa[[var_inicial_mapa]][[sector_inicial_mapa]]$hovertext,
+  hoverinfo = "text",
+  colorscale = list(list(0, "#eef2f7"), list(1, "#1B365D")),
+  marker = list(line = list(color = "#ffffff", width = 0.5)),
+  colorbar = list(title = "", len = 0.75)
+) %>%
+  layout(
+    geo = list(
+      projection = list(type = "natural earth"),
+      showframe = FALSE,
+      showcoastlines = FALSE,
+      showland = TRUE, landcolor = "#f0eeea",
+      bgcolor = "transparent"
+    ),
+    paper_bgcolor = "transparent",
+    margin = list(t = 10, b = 10, l = 0, r = 0)
+  ) %>%
+  config(displayModeBar = FALSE, responsive = TRUE)
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Mapa mundial — síntesis por país"),
+  htmltools::div(
+    style = "display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:16px;",
+    htmltools::div(
+      id = "mapa-botones-var",
+      style = "display:flex; gap:8px; flex-wrap:wrap;",
+      lapply(names(variables_num), function(v) {
+        htmltools::tags$button(
+          class = paste("toggle-btn", if (identical(v, var_inicial_mapa)) "active" else ""),
+          `data-var` = v,
+          variables_num[[v]]
+        )
+      })
+    ),
+    htmltools::tags$select(
+      id = "mapa-selector-sector",
+      class = "select-box",
+      htmltools::tags$option(value = "Todos los sectores", "Todos los sectores"),
+      lapply(sectores, function(s) htmltools::tags$option(value = s, s))
+    )
+  ),
+  htmltools::div(id = "mapa_sintesis_container", mapa_mundial)
+)
+```
+
+```{r mapa-sintesis-datos-json, results='asis', echo=FALSE}
+datos_mapa_json <- jsonlite::toJSON(datos_mapa, auto_unbox = TRUE, na = "null")
+
+cat(paste0('
+<script>
+window.DATOS_MAPA_SINTESIS = ', datos_mapa_json, ';
+</script>
+'))
+```
+
+```{=html}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var datos     = window.DATOS_MAPA_SINTESIS || {};
+  var contenedor = document.getElementById("mapa_sintesis_container");
+  var botones    = document.querySelectorAll("#mapa-botones-var .toggle-btn");
+  var selector   = document.getElementById("mapa-selector-sector");
+
+  var varActual    = "total_count";
+  var sectorActual = "Todos los sectores";
+  var grafDiv      = null;
+
+  function actualizarMapa() {
+    if (!grafDiv) return;
+    var d = datos[varActual] && datos[varActual][sectorActual];
+    if (!d) return;
+    Plotly.restyle(grafDiv, { z: [d.z], text: [d.hovertext] }, [0]);
+  }
+
+  botones.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      varActual = btn.getAttribute("data-var");
+      botones.forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      actualizarMapa();
+    });
+  });
+
+  selector.addEventListener("change", function() {
+    sectorActual = selector.value;
+    actualizarMapa();
+  });
+
+  var intentos = 0;
+  var intervalo = setInterval(function() {
+    intentos++;
+    if (!grafDiv) grafDiv = contenedor.querySelector(".plotly.html-widget");
+    if (grafDiv || intentos > 40) clearInterval(intervalo);
+  }, 150);
+});
+</script>
+```
 
 
 
