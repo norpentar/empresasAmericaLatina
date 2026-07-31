@@ -78,6 +78,7 @@ tabla_info_accionistas <- read_excel(here::here("tablas_input", "auxiliares", "t
                             select(investor_name, ownership_structure, ownership_specific, ownership_family, ownership_multifamily,
                                    principal_activity, finance, country, region
                                    )
+qs_save(data_1, file = here::here("export", "tablas", "peticiones_febrero_2026", "data_1.qs2"))
 ```
 
 Primero me ocupo de la tabla de las 316 empresas.
