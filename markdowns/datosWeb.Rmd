@@ -1453,7 +1453,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
-## Empresas seǵun la tipología de sus principales accionistas
+## Empresas según la tipología de sus principales accionistas
 
 El siguiente gráfico ilustra a las empresas clasificadas por la tipología de su accionista principal y divididas en países. 
 
