@@ -79,6 +79,8 @@ tabla_info_accionistas <- read_excel(here::here("tablas_input", "auxiliares", "t
                                    principal_activity, finance, country, region
                                    )
 qs_save(data_1, file = here::here("export", "tablas", "peticiones_febrero_2026", "data_1.qs2"))
+qs_save(data_2, file = here::here("export", "tablas", "peticiones_febrero_2026", "data_2.qs2"))
+
 ```
 
 Primero me ocupo de la tabla de las 316 empresas.
@@ -361,7 +363,7 @@ data_10 <- data_2 %>% inner_join(data_3, by="empresa.name") %>%
             pivot_wider(names_from = "accionista.country_region", values_from = "sum_total_revenue_ajustado", values_fill = 0,
                         names_glue = "sum_total_revenue_ajustado_{accionista.country_region}")
 
-data_10 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accionista.name), by="empresa.name") %>% 
+data_11 <- data_2 %>% inner_join(data_3 %>% select(empresa.name, tercil, accionista.name), by="empresa.name") %>% 
             left_join(tabla_info_accionistas, by = c("accionista.name" = "investor_name")) %>%
             count(tercil, ownership_structure) %>%
             pivot_wider(names_from = "ownership_structure", values_from = "n", values_fill = 0,
