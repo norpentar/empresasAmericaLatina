@@ -70,8 +70,8 @@ filtro_rango_js <- JS("function(rows, columnId, filterValue) {
   })
 }")
 
-bar_chart <- function(column, tabla, color) {
-  formatting_function <- if (column %in% c("total_revenue", "market_cap")) {
+personalized_bar <- function(column, tabla, color) {
+  formatting_function <- if (column %in% c("total_revenue", "market_cap", "sum_ingresos_totales", "sum_cap_mercado")) {
     scales::label_number(
       suffix = 'B',
       scale = 1e-9,
@@ -83,12 +83,12 @@ bar_chart <- function(column, tabla, color) {
       accuracy = if (column == 'pop_per_km2') 1 else 0.01
     )
   }
-  bar_max_value <- if (column %in% c("total_revenue", "market_cap")) {
+  bar_max_value <- if (column %in% c("total_revenue", "market_cap", "sum_ingresos_totales", "sum_cap_mercado")) {
     max(tabla[,column], na.rm = TRUE)
   } else {
     NULL
   }
-  bar_min_value <- if (column %in% c("total_revenue", "market_cap")) {
+  bar_min_value <- if (column %in% c("total_revenue", "market_cap", "sum_ingresos_totales", "sum_cap_mercado")) {
     0
   } else {
     NULL

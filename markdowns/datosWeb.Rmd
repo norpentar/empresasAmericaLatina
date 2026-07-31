@@ -1,5 +1,5 @@
 ---
-title: "Datos Web"
+title: "Análisis de las principales empresas de América Latina"
 author: "Iñigo Arrazola y Manuel Bayón"
 date: "2026-07-25"
 output:
@@ -36,6 +36,7 @@ library(tidyr)
 library(plotly)
 library(jsonlite)
 
+source(here::here("scripts", "auxiliares_datosWeb.R"))
 ```
 
 ```{css estilo-general, echo=FALSE}
@@ -167,11 +168,27 @@ p { margin: 0 0 16px; }
 }
 .insight strong { color: var(--ink); }
 
-/* ── Ajustes puntuales para que reactable/plotly/ggiraph
-      encajen visualmente dentro de las tarjetas ──────────── */
-.card .reactable { font-family: var(--font-b); font-size: 0.88rem; }
-.card table.girafe_svg,
-.card .plotly { font-family: var(--font-b) !important; }
+/* ── reactable: estilo unificado para TODAS las tablas del documento,
+      incluidas las anidadas dentro de `details` (drill-down) ───── */
+.reactable {
+  font-family: var(--font-b);
+  font-size: 0.88rem;
+}
+.reactable .rt-th {
+  font-family: var(--font-b);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  background: var(--canvas);
+  border-color: var(--border) !important;
+}
+.reactable .rt-td { border-color: var(--border) !important; }
+.reactable .rt-tr:hover .rt-td { background: rgba(27,54,93,0.035); }
+
+.reactable table.girafe_svg,
+.reactable .plotly { font-family: var(--font-b) !important; }
 
 /* ── Controles: botones toggle y cajas de selección ───────── */
 .toggle-btn {
@@ -241,6 +258,8 @@ tabla_paises_variables_num_sector <- tabla_empresas %>% group_by(country_region,
     sum_employees = sum(employees, na.rm = TRUE),
     .groups = "drop"
   )
+
+
 ```
 
 
@@ -265,8 +284,6 @@ En la primera sección presentaremos los datos más relevantes de las empresas d
 Esta tabla nos muestra las empresas procesadas. Puede filtrar las columnas con ayuda de los cuadros de texto y los botones interactivos de la tabla.
 
 ```{r}
-source(here::here("scripts", "auxiliares_datosWeb.R"))
-
 
 tabla_empresas <- tabla_empresas[,columnas_tabla_empresas]
 tabla_empresas$total_revenue[tabla_empresas$total_revenue < 0] <- NA
@@ -316,7 +333,7 @@ reactable(
       filterInput = range_filter("tabla_empresas_widget"),
       filterMethod = filtro_rango_js,
       align = "left",
-      cell = bar_chart("total_revenue", tabla_empresas, "#3182bd")
+      cell = personalized_bar("total_revenue", tabla_empresas, "#3182bd")
     ),
     employees = colDef(
       name = "Empleados",
@@ -333,7 +350,7 @@ reactable(
       filterInput = range_filter("tabla_empresas_widget"),
       filterMethod = filtro_rango_js,
       align = "left",
-      cell = bar_chart("market_cap", tabla_empresas, "#3182bd")
+      cell = personalized_bar("market_cap", tabla_empresas, "#3182bd")
     )
   ),
   defaultPageSize = 15,
@@ -986,6 +1003,140 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
+# Grupos familiares
+
+La presencia de grupos familiares en las grandes corporaciones latinoamericanas sigue siendo una característica marcante. A continuación mostramos los grupos familiares principales presentes en las empresas con algunas de las variables expuestas anteriormente totalizadas. Al hacer click en la fila de uno de estos grupos se desglosaran filas adicionales con las empresas que controlan.
+
+```{r}
+tabla_empresas <- qs_read(here::here("export","objetos","tabla_empresas.qs2"))
+
+tabla_familias_empresas_desglosadas <- tabla_empresas %>%
+  separate_rows(nombre_familias, pais_origen_familias, sep = "\\s*,\\s*") %>%
+  select(nombre_familias, pais_origen_familias, name, country_region, industry_reclassified_2, total_revenue, market_cap, employees) %>%
+  rename(grupo_familiar = nombre_familias,
+         pais_origen = pais_origen_familias,
+         empresa = name,
+         pais_empresa = country_region,
+         sector = industry_reclassified_2,
+         ingresos_totales = total_revenue,
+         cap_mercado = market_cap,
+         empleados = employees
+         ) %>%
+  filter(grupo_familiar != "NA")
+
+tabla_familias <- tabla_familias_empresas_desglosadas %>%
+  group_by(grupo_familiar, pais_origen) %>%
+  summarise(
+    empresas = paste(empresa, collapse = ","),
+    paises = paste(pais_empresa, collapse = ","),
+    sum_ingresos_totales = sum(ingresos_totales, na.rm = TRUE),
+    sum_cap_mercado = sum(cap_mercado, na.rm = TRUE),
+    sum_empleados = sum(empleados, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+tabla_familias <- tabla_familias |> filter(grupo_familiar != "NA") |>
+    select(grupo_familiar, pais_origen, sum_ingresos_totales, sum_cap_mercado, sum_empleados) |>
+    arrange(desc(sum_ingresos_totales)) 
+
+# Formato de moneda local a este chunk (evita depender de que ya exista
+# `formato_moneda` en el entorno global cuando se knittea este bloque).
+formato_moneda_grupos <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Grupos familiares - Empresas"),
+reactable(
+  tabla_familias,
+  elementId = "tabla_grupos_familiares_widget",  # <- id clave para el filtro
+  onClick = "expand",  # click en cualquier parte de la fila expande/colapsa
+  details = function(index) {
+    # `index` refiere a la fila de `tabla_familias` TAL COMO se le pasó a
+    # reactable() (ya ordenada por sum_ingresos_totales desc), así que
+    # podemos indexar directo sobre ella.
+    grupo <- tabla_familias$grupo_familiar[index]
+    pais  <- tabla_familias$pais_origen[index]
+
+    empresas_grupo <- tabla_familias_empresas_desglosadas %>%
+      filter(grupo_familiar == grupo, pais_origen == pais) %>%
+      select(empresa, pais_empresa, ingresos_totales, cap_mercado, empleados) %>%
+      arrange(desc(ingresos_totales))
+
+    htmltools::div(
+      style = "padding: 10px 10px 14px 44px; background: var(--canvas, #f5f4ed);",
+      reactable(
+        empresas_grupo,
+        columns = list(
+          empresa = colDef(name = "Empresa", minWidth = 140),
+          pais_empresa = colDef(name = "País"),
+          ingresos_totales = colDef(
+            name = "Ingresos totales", align = "left",
+            cell = function(v) formato_moneda_grupos(v)
+          ),
+          cap_mercado = colDef(
+            name = "Cap. mercado", align = "left",
+            cell = function(v) formato_moneda_grupos(v)
+          ),
+          empleados = colDef(
+            name = "Empleados", align = "left",
+            format = colFormat(separators = TRUE)
+          )
+        ),
+        outlined = TRUE,
+        compact = TRUE,
+        striped = FALSE,
+        highlight = TRUE,
+        defaultPageSize = 5,
+        showPageSizeOptions = FALSE
+      )
+    )
+  },
+  columns = list(
+    grupo_familiar = colDef(
+      name = "Grupo Familiar", 
+      minWidth = 150,
+      filterable = TRUE
+    ),
+    pais_origen = colDef(
+      name = "País de origen",
+      filterable = TRUE
+    ),
+    sum_ingresos_totales = colDef(
+      name = "Ingresos totales",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_grupos_familiares_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = personalized_bar("sum_ingresos_totales", tabla_familias, "#3182bd")
+    ),
+    sum_cap_mercado = colDef(
+      name = "Cap. mercado",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_grupos_familiares_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = personalized_bar("sum_cap_mercado", tabla_familias, "#3182bd")
+    ),
+    sum_empleados = colDef(
+      name = "Empleados",
+      filterable = TRUE,
+      filterInput = range_filter("tabla_grupos_familiares_widget"),
+      filterMethod = filtro_rango_js,
+      align = "left",
+      cell = data_bars(tabla_familias, fill_color = "#31a354", background = "#f0f0f0",
+                        text_position = "outside-end", number_fmt = scales::label_comma()),
+    )
+  ),
+  defaultPageSize = 15,
+  searchable = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  striped = TRUE,
+  compact = TRUE
+)
+)
+
+```
 
 
 
