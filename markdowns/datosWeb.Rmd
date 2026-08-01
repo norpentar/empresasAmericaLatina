@@ -1,6 +1,6 @@
 ---
 title: "Análisis de las principales empresas de América Latina"
-author: "Iñigo Arrazola y Manuel Bayón"
+author: "Iñigo Arrazola para Wealth and Space"
 date: "2026-07-25"
 output:
   html_document:
@@ -35,6 +35,9 @@ library(qs2)
 library(tidyr)
 library(plotly)
 library(jsonlite)
+library(igraph)
+library(visNetwork)
+
 
 source(here::here("scripts", "auxiliares_datosWeb.R"))
 ```
@@ -1771,6 +1774,87 @@ reactable(
   compact = TRUE
 )
 )
+
+```
+
+# Datos de los accionistas de las empresas
+
+A continuación mostramos algunos datos de los 500 accionistas más importantes de las principales empresas. El siguiente mapa muestra el origen de los mismos.
+
+
+
+
+
+Podemos ver mejor la
+
+```{r}
+# ------------------------------------------------------------
+# 1. DATOS DE NODOS Y RELACIONES.
+# Los datos provienen de la base neo4j.
+# ------------------------------------------------------------
+tabla_accionistas_filtrada <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
+  filter(outstanding > 0.1)
+
+nodes <- bind_rows(
+          tibble(id = unique(tabla_accionistas_filtrada$empresa_principal), group = "Empresa"),
+          tibble(id = unique(tabla_accionistas_filtrada$investor_name), group = "Accionista")
+    ) %>%
+    mutate(label = id) %>%
+    distinct(id, .keep_all = TRUE)
+
+
+edges <- tabla_accionistas_filtrada %>%
+  transmute(
+    from = investor_name,
+    to = empresa_principal,
+    value = outstanding,
+    title = paste0(outstanding, "% de acciones"),
+    arrows = "to"
+  ) %>%
+  filter(!is.na(value))
+
+# ------------------------------------------------------------
+# 3. IGRAPH: calcular métrica topológica (grado)
+# Usamos igraph solo para el cálculo, no para dibujar.
+# ------------------------------------------------------------
+
+g_igraph <- graph_from_data_frame(edges, directed = TRUE, vertices = nodes)
+ 
+#grado <- eigen_centrality(g_igraph)$vector
+grado <- degree(g_igraph, mode = "all")
+ 
+nodes <- nodes %>%
+  mutate(
+    value = grado[id],                # tamaño del nodo = su grado en la red
+    title = paste0(
+      "<b>", id, "</b><br>",
+      "Conexiones: ", grado[id]
+    )
+  )
+
+# ------------------------------------------------------------
+# 4. VISNETWORK: dibujar el grafo interactivo
+# ------------------------------------------------------------
+ 
+visNetwork(nodes, edges, width = "100%", height = "600px") %>%
+  visGroups(groupname = "Empresa",    color = "#4a90d9", shape = "dot") %>%
+  visGroups(groupname = "Accionista", color = "#d94a4a", shape = "dot") %>%
+  visNodes(scaling = list(min = 15, max = 50)) %>%   # rango visual de tamaño según 'value'
+  visEdges(smooth = FALSE) %>%
+  visOptions(
+    highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
+    nodesIdSelection  = list(
+      enabled = TRUE,
+      values = sort(nodes$id)
+    )  # dropdown de búsqueda por nombre
+  ) %>%
+  visLegend() %>%
+  visLayout(randomSeed = 123)                          # para que el layout sea reproducible
+ 
+
+
 
 ```
 

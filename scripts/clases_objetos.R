@@ -223,13 +223,13 @@ Empresa <- R6Class("Empresa",
         private$.nombre_familias <- nombre_familias
         private$.pais_origen_familias <- pais_origen_familias
         private$.indice_accionistas <- new.env(hash = TRUE, parent = emptyenv())
-        if(!is.null(private$.accionistas)){
+        if(!is.null(accionistas)){
           for(accionista in private$.accionistas){
             assign(accionista$entidad$name, accionista, envir = private$.indice_accionistas)  # lo registramos en el índice
           }  
         }
         private$.indice_filiales <- new.env(hash = TRUE, parent = emptyenv())
-        if(!is.null(private$.filiales)){
+        if(!is.null(filiales)){
           for(filial in private$.filiales){
             assign(filial$empresa$name, filial, envir = private$.indice_filiales)  # lo registramos en el índice
           }  
