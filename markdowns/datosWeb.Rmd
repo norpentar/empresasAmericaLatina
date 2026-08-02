@@ -1779,7 +1779,221 @@ reactable(
 
 # Datos de los accionistas de las empresas
 
-A continuación mostramos algunos datos de los 500 accionistas más importantes de las principales empresas. El siguiente mapa muestra el origen de los mismos.
+A continuación mostramos algunos datos de los 500 accionistas más importantes de las principales empresas. En el siguiente mapa puede visualizar, según el menú de selección, el origen de los mismos, los países donde invierten, y la cantidad invertidad por sector en cada país.
+
+```{r}
+tabla_accionistas_filtrada <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+
+tabla_origen_paises <- tabla_accionistas_filtrada %>% group_by(country_region) %>%
+  summarise(
+    total_count_origen = n_distinct(investor_name, na.rm = TRUE),
+  )
+
+tabla_destino_paises <- tabla_accionistas_filtrada %>%
+  group_by(empresa_principal_pais, industry_reclassified_2) %>%
+  summarise(
+    total_count_destino = n_distinct(investor_name, na.rm = TRUE),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  )
+  
+tabla_paises_accionistas <- tabla_origen_paises %>%
+  full_join(tabla_destino_paises, by = c("country_region" = "empresa_principal_pais")) %>%
+  select(country_region, industry_reclassified_2, total_count_origen, total_count_destino, sum_value) %>%
+  rename(pais = country_region,
+         sector = industry_reclassified_2 
+        )
+
+# Si hiciera falta homogeneizar nombres de país para que coincidan con los
+# nombres que usa Plotly (locationmode = "country names"), añádelos aquí.
+normaliza_pais_mapa_accionistas <- c(
+  "United States of America" = "United States"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+variables_num_accionistas <- c(
+  total_count_origen  = "Origen de accionistas",
+  total_count_destino = "Destino de inversión",
+  sum_value            = "Valor invertido"
+)
+
+tabla_mapa_base_accionistas <- tabla_paises_accionistas %>%
+  rename(country_region = pais) %>%
+  mutate(
+    country_region = dplyr::recode(country_region, !!!normaliza_pais_mapa_accionistas)
+  )
+
+sectores_mapa_accionistas <- sort(unique(tabla_mapa_base_accionistas$sector))
+paises_mapa_accionistas   <- sort(unique(tabla_mapa_base_accionistas$country_region))
+
+formato_valor_mapa_accionistas <- list(
+  total_count_origen  = scales::label_comma(),
+  total_count_destino = scales::label_comma(),
+  sum_value            = formato_moneda
+)
+
+# total_count_origen NO se suma entre sectores (es un valor ya fijo por país,
+# repetido en cada fila de sector); total_count_destino y sum_value sí se suman.
+calcular_grupo_accionistas <- function(df, var_col) {
+  if (var_col == "total_count_origen") {
+    resumen <- df %>%
+      group_by(country_region) %>%
+      summarise(valor = dplyr::first(.data[[var_col]]), .groups = "drop")
+  } else {
+    resumen <- df %>%
+      group_by(country_region) %>%
+      summarise(valor = sum(.data[[var_col]], na.rm = TRUE), .groups = "drop")
+  }
+  resumen <- resumen[match(paises_mapa_accionistas, resumen$country_region), ]
+  list(valor = resumen$valor)
+}
+
+# Para cada variable numérica, precalculamos z + hovertext para "Todos los
+# sectores" y para cada sector individual, siempre alineados con
+# `paises_mapa_accionistas`.
+construir_datos_mapa_accionistas <- function(var_col) {
+  fmt       <- formato_valor_mapa_accionistas[[var_col]]
+  var_label <- variables_num_accionistas[[var_col]]
+
+  armar_entrada <- function(df, etiqueta_sector) {
+    res <- calcular_grupo_accionistas(df, var_col)
+    list(
+      z = res$valor,
+      hovertext = paste0(
+        "<b>", paises_mapa_accionistas, "</b><br>",
+        etiqueta_sector, "<br>",
+        var_label, ": ", fmt(res$valor)
+      )
+    )
+  }
+
+  lista <- list()
+  lista[["Todos los sectores"]] <- armar_entrada(tabla_mapa_base_accionistas, "Todos los sectores")
+
+  for (sec in sectores_mapa_accionistas) {
+    df_sec <- tabla_mapa_base_accionistas %>% filter(sector == sec)
+    lista[[sec]] <- armar_entrada(df_sec, sec)
+  }
+
+  lista
+}
+
+datos_mapa_accionistas <- lapply(names(variables_num_accionistas), construir_datos_mapa_accionistas)
+names(datos_mapa_accionistas) <- names(variables_num_accionistas)
+
+var_inicial_mapa_accionistas    <- "total_count_origen"
+sector_inicial_mapa_accionistas <- "Todos los sectores"
+
+mapa_mundial_accionistas <- plot_ly(
+  type = "choropleth",
+  locations = paises_mapa_accionistas,
+  locationmode = "country names",
+  z = datos_mapa_accionistas[[var_inicial_mapa_accionistas]][[sector_inicial_mapa_accionistas]]$z,
+  text = datos_mapa_accionistas[[var_inicial_mapa_accionistas]][[sector_inicial_mapa_accionistas]]$hovertext,
+  hoverinfo = "text",
+  colorscale = list(list(0, "#e8f0f9"), list(1, "#0D3B66")),  # escala azul
+  marker = list(line = list(color = "#ffffff", width = 0.5)),
+  colorbar = list(title = "", len = 0.75)
+) %>%
+  layout(
+    geo = list(
+      projection = list(type = "natural earth"),
+      showframe = FALSE,
+      showcoastlines = FALSE,
+      showland = TRUE, landcolor = "#f0eeea",
+      bgcolor = "transparent"
+    ),
+    paper_bgcolor = "transparent",
+    margin = list(t = 10, b = 10, l = 0, r = 0)
+  ) %>%
+  config(displayModeBar = FALSE, responsive = TRUE)
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Mapa mundial — accionistas: origen, destino y valor invertido"),
+  htmltools::div(
+    id = "mapa-accionistas-controles",
+    style = "display:flex; align-items:center; margin-bottom:16px;",
+    htmltools::div(
+      id = "mapa-botones-var-accionistas",
+      style = "display:flex; gap:8px;",
+      lapply(names(variables_num_accionistas), function(v) {
+        htmltools::tags$button(
+          class = paste("toggle-btn", if (identical(v, var_inicial_mapa_accionistas)) "active" else ""),
+          `data-var` = v,
+          variables_num_accionistas[[v]]
+        )
+      })
+    ),
+    htmltools::tags$select(
+      id = "mapa-selector-sector-accionistas",
+      class = "select-box",
+      htmltools::tags$option(value = "Todos los sectores", "Todos los sectores"),
+      lapply(sectores_mapa_accionistas, function(s) htmltools::tags$option(value = s, s))
+    )
+  ),
+  htmltools::div(id = "mapa_sintesis_accionistas_container", mapa_mundial_accionistas)
+)
+```
+
+
+```{r}
+datos_mapa_accionistas_json <- jsonlite::toJSON(datos_mapa_accionistas, auto_unbox = TRUE, na = "null")
+
+cat(paste0('
+<script>
+window.DATOS_MAPA_SINTESIS_ACCIONISTAS = ', datos_mapa_accionistas_json, ';
+</script>
+'))
+```
+
+```{=html}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var datosAccionistas         = window.DATOS_MAPA_SINTESIS_ACCIONISTAS || {};
+  var contenedorAccionistas     = document.getElementById("mapa_sintesis_accionistas_container");
+  var botonesAccionistas        = document.querySelectorAll("#mapa-botones-var-accionistas .toggle-btn");
+  var selectorSectorAccionistas = document.getElementById("mapa-selector-sector-accionistas");
+
+  var varActualAccionistas    = "total_count_origen";
+  var sectorActualAccionistas = "Todos los sectores";
+  var grafDivAccionistas      = null;
+
+  function actualizarMapaAccionistas() {
+    if (!grafDivAccionistas) return;
+    var d = datosAccionistas[varActualAccionistas] &&
+            datosAccionistas[varActualAccionistas][sectorActualAccionistas];
+    if (!d) return;
+    Plotly.restyle(grafDivAccionistas, { z: [d.z], text: [d.hovertext] }, [0]);
+  }
+
+  botonesAccionistas.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      varActualAccionistas = btn.getAttribute("data-var");
+      botonesAccionistas.forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      actualizarMapaAccionistas();
+    });
+  });
+
+  selectorSectorAccionistas.addEventListener("change", function() {
+    sectorActualAccionistas = selectorSectorAccionistas.value;
+    actualizarMapaAccionistas();
+  });
+
+  var intentosAccionistas = 0;
+  var intervaloAccionistas = setInterval(function() {
+    intentosAccionistas++;
+    if (!grafDivAccionistas) grafDivAccionistas = contenedorAccionistas.querySelector(".plotly.html-widget");
+    if (grafDivAccionistas || intentosAccionistas > 40) clearInterval(intervaloAccionistas);
+  }, 150);
+});
+</script>
+```
 
 
 
