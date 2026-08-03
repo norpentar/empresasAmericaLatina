@@ -2149,7 +2149,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
-En el siguiente gráfico podemos ver la composición por sector de las inversiones de los 500 principales accionistas según los países de destino.
+En el siguiente gráfico podemos ver la composición por sector de las inversiones de los 500 principales accionistas según los países de destino. Al hacer doble click en un sector de la leyenda podrá filtrar los datos por sector.
 
 ```{r}
 # -----------------------------------------------------------
@@ -2243,7 +2243,7 @@ for (sec in sectores){
     type = "bar",
     x = paises,
     y = datos_por_var_accionistas_sectores[[var_inicial_accionistas_sectores]]$y[[sec]],
-    hovertex = datos_por_var_accionistas_sectores[[var_inicial_accionistas_sectores]]$hovertext[[sec]],
+    hovertext = datos_por_var_accionistas_sectores[[var_inicial_accionistas_sectores]]$hovertext[[sec]],
     hoverinfo = "text",
     name = etiquetas_pais_sectores[[sec]],
     marker = list(color = colores_accionistas_sectores[[sec]]),
