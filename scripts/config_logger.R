@@ -32,7 +32,7 @@ log_threshold(INFO, namespace = "auxiliares")
 log_appender(appender_tee("logs/auxiliares.log"), namespace = "auxiliares")
 
 # Namespace para el módulo de configuración de los objetos
-log_threshold(INFO, namespace = "objetos")
+log_threshold(DEBUG, namespace = "objetos")
 log_appender(appender_tee("logs/objetos.log"), namespace = "objetos")
 
 # Namespace general (por si quieres logs que no pertenezcan a ningún módulo específico)

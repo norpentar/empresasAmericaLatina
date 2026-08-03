@@ -1449,14 +1449,24 @@ ListaEntidades <- R6Class("ListaEntidades",
     },
     sacaNodosListaEntidades = function(){
       eliminaDuplicados <- function(lista_nodos){
-        for(nodo in lista_nodos){
-            indices <- which(sapply(lista_nodos, function (n) nodo$name == n$name))
-            if (length(indices) != 1){
-              indices <- indices[-1] #marco todos los índices duplicados menos el primero
-              lista_nodos <- lista_nodos[-indices] #elimino indices duplicados
-            }
+        lista_names <- sapply(lista_nodos, function(n) n$name)
+        mantener <- !duplicated(lista_names)
+        n_duplicados <- sum(!mantener)
+        if(n_duplicados > 0){
+          nombres_duplicados <- unique(lista_names[!mantener])
+          msg <- glue::glue("Se eliminaron {n_duplicados} entidades duplicadas: {paste(nombres_duplicados, collapse = ', ')}")
+          log_debug_multi(msg, namespaces = c("global", "clase_objetos"))
         }
+        lista_nodos <- lista_nodos[mantener]
         return(lista_nodos)
+        #for(nodo in objeto_lista_nodos$entidades){
+             #indices <- which(sapply(lista_nodos, function (n) nodo$name == n$name))
+           # if (length(indices) != 1){
+              #indices <- indices[-1] #marco todos los índices duplicados menos el primero
+              #lista_nodos <- lista_nodos[-indices] #elimino indices duplicados
+            #}
+        #}
+        #return(lista_nodos)
       }
       
       #saco todos los nodos de las entidades de la lista
