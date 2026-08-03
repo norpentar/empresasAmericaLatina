@@ -37,6 +37,7 @@ library(plotly)
 library(jsonlite)
 library(igraph)
 library(visNetwork)
+library(randomcoloR)
 
 
 source(here::here("scripts", "auxiliares_datosWeb.R"))
@@ -1995,7 +1996,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
-Con ayuda del siguiente grafo podemos explorar mejor los vínculos entre los 500 principales accionistas y las empresas.
+Con ayuda del siguiente grafo podemos explorar mejor los vínculos entre los 500 principales accionistas y las empresas. Puedes hacer zoom a los nodos para ver mejor el nombre de las compañías y sus inversores, así como buscarlos individualmente en el menú de selección. Al pasar el cursor sobre las flechas, podrás ver el porcentaje de acciones controladas por los accionistas para una determinada empresa.
 
 ```{r}
 # ------------------------------------------------------------
@@ -2147,6 +2148,186 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>
 ```
+
+En el siguiente gráfico podemos ver la composición por sector de las inversiones de los 500 principales accionistas según los países de destino.
+
+```{r}
+# -----------------------------------------------------------
+# 1. Agrego los datos por país destino de inversión y sector
+#    (normalizo capitalización y trato "NA"/NA como "Sin dato")
+# -----------------------------------------------------------
+tabla_accionistas_filtrada <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+
+tabla_grafico_accionistas_sectores <- tabla_accionistas_filtrada %>% 
+  group_by(empresa_principal_pais, industry_reclassified_2) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename(
+    pais = empresa_principal_pais,
+    sector = industry_reclassified_2
+    )
+
+variables_num <- c(
+  total_count = "Empresas totales",
+  sum_value = "Valor total"
+)
+
+sectores <- sort(unique(tabla_grafico_accionistas_sectores$sector))
+paises <- sort(unique(tabla_grafico_accionistas_sectores$pais))
+etiquetas_pais_sectores <- setNames(sectores, sectores)  
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+formato_eje_accionistas_sectores <- list(
+  total_count = list(tickformat = ",", tickprefix = "", fmt = scales::label_comma()),
+  sum_value = list(tickformat = ",.2s", tickprefix = "$", fmt = formato_moneda)
+)  
+  
+tabla_completa_accionistas_sectores <- tabla_grafico_accionistas_sectores %>%
+  tidyr::complete(
+    pais = paises, sector = sectores,
+    fill = list(total_count = 0, sum_value = 0)
+  ) %>%
+  select(pais, sector, total_count, sum_value) %>%
+  arrange(pais, sector)
+
+# Reutiliza el formato de eje ya definido para el gráfico de países
+# (misma lista `formato_eje_tercil`); si prefieres una copia
+# independiente, duplícala aquí como `formato_eje_ownership`.
+
+construir_datos_grafico_accionistas_sectores <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  fmt <- formato_eje_accionistas_sectores[[var_col]]$fmt
+  y_list <- list()
+  hovertext_list <- list()
+  for(sec in sectores){
+    df_sec <- tabla_completa_accionistas_sectores %>%
+      filter(sector == sec) %>%
+      arrange(match(pais, paises))
+    y_list[[sec]] <- df_sec[[var_col]]
+    hovertext_list[[sec]] <- paste0(
+      "<b>", df_sec$pais, "</b><br>",
+      "Sector: ", sec, "<br>",
+      var_label, ": ", fmt(df_sec[[var_col]])
+    )
+  }
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_accionistas_sectores <- lapply(names(variables_num), construir_datos_grafico_accionistas_sectores)
+names(datos_por_var_accionistas_sectores) <- names(variables_num)
+```
+
+```{r}
+# -----------------------------------------------------------
+# 2. Gráfico base — una traza por sector, agrupadas por país
+# -----------------------------------------------------------
+
+var_inicial_accionistas_sectores <- "total_count"
+id_grafico_accionistas_sectores   <- "grafico_accionistas_sectores"
+
+set.seed(123)  # fijo semilla para que sean los mismos colores cada vez
+colores_accionistas_sectores <- setNames(
+  randomcoloR::distinctColorPalette(length(sectores)),
+  sectores
+)
+
+p_accionistas_sectores <- plot_ly()
+
+for (sec in sectores){
+  p_accionistas_sectores <- p_accionistas_sectores %>% add_trace(
+    type = "bar",
+    x = paises,
+    y = datos_por_var_accionistas_sectores[[var_inicial_accionistas_sectores]]$y[[sec]],
+    hovertex = datos_por_var_accionistas_sectores[[var_inicial_accionistas_sectores]]$hovertext[[sec]],
+    hoverinfo = "text",
+    name = etiquetas_pais_sectores[[sec]],
+    marker = list(color = colores_accionistas_sectores[[sec]]),
+    visible = TRUE
+  )
+}
+
+n_trazas_accionistas_sectores <- length(sectores)
+idx_trazas_accionistas_sectores <- 0:(n_trazas_accionistas_sectores - 1)
+
+# -----------------------------------------------------------
+# 3. Botones de variable
+# -----------------------------------------------------------
+
+botones_accionistas_sectores <- lapply(names(variables_num), function(v){
+  list(
+    method = "update",
+    args = list(
+      list(
+        y = unname(datos_por_var_accionistas_sectores[[v]]$y[sectores]),
+        hovertext = unname(datos_por_var_accionistas_sectores[[v]]$hovertext[sectores])
+      ),
+      list(
+        `yaxis.title.text` = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_accionistas_sectores[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_accionistas_sectores[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas_accionistas_sectores
+    ),
+    label = variables_num[[v]]
+  )
+})
+
+# -----------------------------------------------------------
+# 4. Layout
+# -----------------------------------------------------------
+
+p_accionistas_sectores <- p_accionistas_sectores %>% layout(
+  height = 550,
+  barmode = "stack",
+  margin = list(t = 90, r = 40),
+  xaxis = list(title = NULL),
+  yaxis = list(
+    title = variables_num[[var_inicial_accionistas_sectores]],
+    tickformat = formato_eje_accionistas_sectores[[var_inicial_accionistas_sectores]]$tickformat,
+    tickprefix = formato_eje_accionistas_sectores[[var_inicial_accionistas_sectores]]$tickprefix,
+    autorange = TRUE
+  ),
+  legend = list(title = list( text = "Sectores")),
+  updatemenus = list(
+    list(
+      type = "buttons",
+      direction = "right",
+      x = 0,
+      y = 1.15,
+      xanchor = "left",
+      buttons = botones_accionistas_sectores
+    )
+  )
+) %>%
+  config(responsive = TRUE)
+
+p_accionistas_sectores <- p_accionistas_sectores %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Composición de la inversión por países, deslgosada según sectores"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_sectores",
+    style = "position:relative;",
+    p_accionistas_sectores
+  )
+)
+```
+
+
+
 
 ```{=html}
 </div>
