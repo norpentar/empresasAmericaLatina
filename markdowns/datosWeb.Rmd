@@ -1234,8 +1234,6 @@ htmltools::div(
 )
 ```
 
-
-
 Este mapa muestra, como el anterior, la distribución espacial de las empresas. Sin embargo, en el mapa ahora podemos visualizar las empresas según sus terciles.
 
 ```{r}
@@ -2068,7 +2066,14 @@ grafo_red_accionistas <- visNetwork(nodes_grafo_accionistas, edges_grafo_accioni
       values = sort(nodes_grafo_accionistas$id)
     )  # queda oculto: lo controlamos desde los dos selectores propios (ver bloque JS)
   ) %>%
-  visLegend() %>%
+  visLegend(
+    main = list(text = "", style = "font-size: 8px;"),
+    width = 0.16,      # antes por defecto 0.2 → ocupa menos ancho del canvas
+    position = "right",
+    stepX = 100,         # separación horizontal entre entradas
+    stepY = 100,         # separación vertical entre entradas
+    zoom = FALSE        # evita que el zoom del grafo agrande los nodos de la leyenda
+  )  %>%
   visLayout(randomSeed = 123)                          # para que el layout sea reproducible
 
 htmltools::div(
@@ -2783,8 +2788,8 @@ grafo_red_accionistas_familias <- visNetwork(nodes_grafo_accionistas_familias, e
     solver = "forceAtlas2Based",
     forceAtlas2Based = list(
       gravitationalConstant = -100,
-      springLength = 150,
-      springConstant = 0.08,
+      springLength = 250,
+      springConstant = 0.12,
       avoidOverlap = 1
     ),
     stabilization = list(enabled = TRUE, iterations = 200)
@@ -2799,7 +2804,14 @@ grafo_red_accionistas_familias <- visNetwork(nodes_grafo_accionistas_familias, e
       values = sort(nodes_grafo_accionistas_familias$id)
     )  # queda oculto: lo controlamos desde los dos selectores propios (ver bloque JS)
   ) %>%
-  visLegend() %>%
+  visLegend(
+    main = list(text = "", style = "font-size: 8px;"),
+    width = 0.16,      # antes por defecto 0.2 → ocupa menos ancho del canvas
+    position = "right",
+    stepX = 100,         # separación horizontal entre entradas
+    stepY = 100,         # separación vertical entre entradas
+    zoom = FALSE        # evita que el zoom del grafo agrande los nodos de la leyenda
+  ) %>%
   visLayout(randomSeed = 123)                          # para que el layout sea reproducible
 
 htmltools::div(
