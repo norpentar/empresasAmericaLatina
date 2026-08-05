@@ -765,6 +765,169 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
+En este gráfico ilustramos la distribución de las variables financieras "Ingresos Totales" y "Capitalización de Mercado" de las empresas, desglosadas por sector.
+
+```{r}
+# Sector: usamos industry_reclassified_2 (13 categorías, manejable en eje X).
+# Si prefieres más granularidad, cambia a industry_reclassified (26 categorías).
+tabla_grafico_empresas_boxplot <- tabla_empresas %>%
+  mutate(
+    sector = ifelse(is.na(industry_reclassified_2) | industry_reclassified_2 == "",
+                     "Other", industry_reclassified_2)
+  )
+
+variables_num <- c(
+  total_revenue = "Ingresos Totales",
+  market_cap = "Cap. Mercado",
+  employees = "Empleados"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+formato_eje_empresas_boxplot <- list(
+  total_revenue = list(tickformat = ",.2s",  tickprefix = "$", fmt = formato_moneda),
+  market_cap    = list(tickformat = ",.2s",  tickprefix = "$", fmt = formato_moneda),
+  employees     = list(tickformat = ",",    tickprefix = "", fmt = scales::label_comma())
+)
+
+label_auto <- scales::label_number(scale_cut = scales::cut_short_scale())
+
+# Orden de los sectores en el eje X: por mediana de total_revenue (desc),
+# en vez de alfabético, para que se lea mejor de un vistazo.
+tabla_grafico_empresas_boxplot <- tabla_grafico_empresas_boxplot %>%
+  filter(!is.na(total_revenue)) %>%
+  group_by(sector) %>%
+  mutate(med_rev = median(total_revenue), .groups = "drop") %>%
+  ungroup() %>%
+  arrange(desc(med_rev))
+
+sectores <- unique(
+  tabla_grafico_empresas_boxplot %>%
+    pull(sector)
+)
+colores_sectores <- setNames(c("#7AE85E", "#D3DE67", "#DF5EC7", "#94B4D7", "#75DFD8", "#DDE0CA", 
+"#DFA2CF", "#A149E0", "#DCAA59", "#9181DA", "#E46B6D", "#CCA294", 
+"#8EDB9C"), sectores)
+
+vectorColores <- function(df, var_col, colores){
+  colores_df <- tibble(campo = names(colores), color = colores)
+  vector <- df %>% left_join(colores_df, by = join_by(!!sym(var_col) == campo)) %>%
+    pull(color)
+  return(unname(vector))
+}
+
+
+# --- 3. Construye datos por trace (variable numérica) -------------
+construir_datos_grafico_empresas_boxplot <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  y_list <- list()
+  hovertext_list <- list()
+  
+  y_list <- tabla_grafico_empresas_boxplot[[var_col]]
+  hovertext_list <- paste0(
+      "<b>", tabla_grafico_empresas_boxplot$name, "</b><br>",
+      "Sector: ", tabla_grafico_empresas_boxplot$sector, "<br>",
+      var_label, ": ", formato_eje_empresas_boxplot[[var_col]]$fmt(tabla_grafico_empresas_boxplot[[var_col]])
+      )
+  
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_grafico_empresas_boxplot <- lapply(names(variables_num), construir_datos_grafico_empresas_boxplot)
+names(datos_por_var_grafico_empresas_boxplot) <- names(variables_num)
+
+variable_inicial_grafico_empresas_boxplot <- "total_revenue"
+id_grafico_empresas_boxplot <- "grafico_empresas_boxplot"
+
+idx_trazas <- 0
+
+botones_grafico_empresas_boxplot <- lapply(names(variables_num), function(v){
+ list(
+   method = "update",
+   args = list(
+     list(
+      y = list(unname(datos_por_var_grafico_empresas_boxplot[[v]]$y)),
+      hovertext = list(unname(datos_por_var_grafico_empresas_boxplot[[v]]$hovertext))
+     ),
+     list(
+        `yaxis.title.text`  = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_empresas_boxplot[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_empresas_boxplot[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas
+    ),
+  label = variables_num[[v]]
+ )
+  
+})
+
+# --- 4. Gráfico ---------------------------------------------------
+
+p_grafico_empresas_boxplot <- plot_ly() %>%
+  add_trace(
+    x = tabla_grafico_empresas_boxplot$sector,
+    y = datos_por_var_grafico_empresas_boxplot[[variable_inicial_grafico_empresas_boxplot]]$y,
+    type = "box",
+    name = variables_num[[variable_inicial_grafico_empresas_boxplot]],
+    boxmean = "sd",
+    boxpoints = "all",
+    jitter = 0.7,
+    pointpos = 0,
+    fillcolor = "rgba(31,119,180,0.25)",
+    line = list(width = 2, color = "rgba(31,119,180,0.9)"),
+    marker = list(size = 6, opacity = 0.6, color = "rgba(214,39,40,0.65)"),
+    hoverinfo = "text",
+    name = paste0("Sector: ", tabla_grafico_empresas_boxplot$sector),
+    marker = list(color = vectorColores(tabla_grafico_empresas_boxplot, "sector", colores_sectores)),
+    hovertext = datos_por_var_grafico_empresas_boxplot[[variable_inicial_grafico_empresas_boxplot]]$hovertext,
+    showlegend = FALSE,
+    visible = TRUE
+  ) %>%
+  layout(
+    title = NULL,
+    margin = list(t = 90, r = 40),
+    hovermode = "closest",
+    xaxis = list (title = NULL, tickangle = -30),
+    yaxis = list(
+      title = variables_num[[variable_inicial_grafico_empresas_boxplot]],
+      tickformat = formato_eje_empresas_boxplot[[variable_inicial_grafico_empresas_boxplot]]$tickformat,
+      tickprefix = formato_eje_empresas_boxplot[[variable_inicial_grafico_empresas_boxplot]]$tickprefix,
+      autorange = TRUE
+    ),
+    updatemenus = list(
+      list(
+        type = "buttons", direction = "right",
+        x = 0, y = 1.15, xanchor = "left",
+        buttons = botones_grafico_empresas_boxplot
+      )
+    )
+  ) %>%
+  config(responsive = TRUE)
+
+p_grafico_empresas_boxplot <- p_grafico_empresas_boxplot %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Distribución de las variables financieras de las empresas por sector"),
+  htmltools::div(
+    id = "contenedor_grafico_empresas_boxplot",
+    style = "position:relative;",
+    p_grafico_empresas_boxplot
+  )
+)
+
+
+
+
+```
+
 
 ```{=html}
 </div>
