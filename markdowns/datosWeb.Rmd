@@ -765,7 +765,7 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
-En este gráfico ilustramos la distribución de las variables financieras "Ingresos Totales" y "Capitalización de Mercado" de las empresas, desglosadas por sector.
+En este gráfico ilustramos la distribución de las variables financieras "Ingresos Totales" y "Capitalización de Mercado" y el total de empleados de las empresas, desglosadas por sector.
 
 ```{r}
 # Sector: usamos industry_reclassified_2 (13 categorías, manejable en eje X).
@@ -886,6 +886,7 @@ p_grafico_empresas_boxplot <- plot_ly() %>%
   ) %>%
   layout(
     title = NULL,
+    height = 800,
     margin = list(t = 90, r = 40),
     hovermode = "closest",
     xaxis = list (title = NULL, tickangle = -30),
@@ -908,8 +909,8 @@ p_grafico_empresas_boxplot <- plot_ly() %>%
 p_grafico_empresas_boxplot <- p_grafico_empresas_boxplot %>%
   htmlwidgets::onRender(
     "function(el) {
-      el.style.height = '550px';
-      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+      el.style.height = '800px';
+      if (el.parentElement) { el.parentElement.style.height = '800px'; }
     }"
   )
 
@@ -2495,7 +2496,9 @@ htmltools::div(
 )
 ```
 
-Examinemos mejor la distribución espacial de los accionistas según su tipología. En el mapa de abajo podemos seleccionar el tipo de accionista para ver su número total y su valor de inversión acumulado.
+### Tipologías de los accionistas
+
+Examinemos mejor la distribución espacial de los accionistas según su estructura de propiedad (ownership structure) En el mapa de abajo podemos seleccionar el tipo de accionista para ver su número total y su valor de inversión acumulado.
 
 ```{r}
 # -----------------------------------------------------------
@@ -2705,7 +2708,7 @@ document.addEventListener("DOMContentLoaded", function() {
 ```
 
 
-En el siguiente gráfico podemos ver la composición por país de los diferentes tipos de accionistas principales (los 500 más importantes). 
+En el siguiente gráfico podemos ver la composición por país de los accionistas principales según su estructura de propiedad (ownership structure) (los 500 más importantes). 
 
 ```{r}
 # -----------------------------------------------------------
@@ -2881,6 +2884,390 @@ htmltools::div(
   )
 )
 ```
+
+A continuación mostramos un mapa similar al anterior, con la distribución espacial de los accionistas esta vez según su ownership specific.
+
+```{r}
+# -----------------------------------------------------------
+# 1. Datos base — mapa de accionistas por ownership_specific
+# -----------------------------------------------------------
+
+tabla_accionistas_filtrada_ownership_specific <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+
+
+tabla_mapa_ownership_specific <- tabla_accionistas_filtrada_ownership_specific %>% 
+  group_by(country, ownership_specific) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename(
+    pais = country
+    )
+
+# Si hiciera falta homogeneizar nombres de país para que coincidan con Plotly
+# (locationmode = "country names"), añádelos aquí.
+normaliza_pais_mapa_ownership_specific <- c(
+  "United States of America" = "United States"
+)
+
+formato_moneda_mapa_ownership_specific <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+variables_num_mapa_ownership_specific <- c(
+  total_count = "Total accionistas según procedencia",
+  sum_value   = "Valor total"
+)
+
+tabla_mapa_base_ownership_specific <- tabla_mapa_ownership_specific %>%
+  mutate(
+    pais = dplyr::recode(pais, !!!normaliza_pais_mapa_ownership_specific)
+  )
+
+tipologias_mapa_ownership_specific <- sort(unique(tabla_mapa_base_ownership_specific$ownership_specific))
+paises_mapa_ownership_specific     <- sort(unique(tabla_mapa_base_ownership_specific$pais))
+
+formato_valor_mapa_ownership_specific <- list(
+  total_count = scales::label_comma(),
+  sum_value   = formato_moneda_mapa_ownership_specific
+)
+
+# Tanto total_count como sum_value se suman al agregar por país
+# (a diferencia del mapa de accionistas por sector, aquí ninguna de las dos
+# variables es un valor constante repetido por fila).
+calcular_grupo_mapa_ownership_specific <- function(df, var_col) {
+  resumen <- df %>%
+    group_by(pais) %>%
+    summarise(valor = sum(.data[[var_col]], na.rm = TRUE), .groups = "drop")
+  resumen <- resumen[match(paises_mapa_ownership_specific, resumen$pais), ]
+  list(valor = resumen$valor)
+}
+
+# Para cada variable numérica, precalculamos z + hovertext para "Todas las
+# tipologías" y para cada ownership_specific individual, siempre alineados
+# con `paises_mapa_ownership_specific`.
+construir_datos_mapa_ownership_specific <- function(var_col) {
+  fmt       <- formato_valor_mapa_ownership_specific[[var_col]]
+  var_label <- variables_num_mapa_ownership_specific[[var_col]]
+
+  armar_entrada <- function(df, etiqueta_tipologia) {
+    res <- calcular_grupo_mapa_ownership_specific(df, var_col)
+    list(
+      z = res$valor,
+      hovertext = paste0(
+        "<b>", paises_mapa_ownership_specific, "</b><br>",
+        etiqueta_tipologia, "<br>",
+        var_label, ": ", fmt(res$valor)
+      )
+    )
+  }
+
+  lista <- list()
+  lista[["Todas las tipologías"]] <- armar_entrada(tabla_mapa_base_ownership_specific, "Todas las tipologías")
+
+  for (tip in tipologias_mapa_ownership_specific) {
+    df_tip <- tabla_mapa_base_ownership_specific %>% filter(ownership_specific == tip)
+    lista[[tip]] <- armar_entrada(df_tip, tip)
+  }
+
+  lista
+}
+
+datos_mapa_ownership_specific <- lapply(names(variables_num_mapa_ownership_specific), construir_datos_mapa_ownership_specific)
+names(datos_mapa_ownership_specific) <- names(variables_num_mapa_ownership_specific)
+
+var_inicial_mapa_ownership_specific       <- "total_count"
+tipologia_inicial_mapa_ownership_specific <- "Todas las tipologías"
+
+# -----------------------------------------------------------
+# 2. Gráfico base + controles HTML
+# -----------------------------------------------------------
+
+mapa_accionistas_ownership_specific <- plot_ly(
+  type = "choropleth",
+  locations = paises_mapa_ownership_specific,
+  locationmode = "country names",
+  z = datos_mapa_ownership_specific[[var_inicial_mapa_ownership_specific]][[tipologia_inicial_mapa_ownership_specific]]$z,
+  text = datos_mapa_ownership_specific[[var_inicial_mapa_ownership_specific]][[tipologia_inicial_mapa_ownership_specific]]$hovertext,
+  hoverinfo = "text",
+  colorscale = list(list(0, "#fdf1e3"), list(1, "#B5560A")),
+  marker = list(line = list(color = "#ffffff", width = 0.5)),
+  colorbar = list(title = "", len = 0.75)
+) %>%
+  layout(
+    geo = list(
+      projection = list(type = "natural earth"),
+      showframe = FALSE,
+      showcoastlines = FALSE,
+      showland = TRUE, landcolor = "#f0eeea",
+      bgcolor = "transparent"
+    ),
+    paper_bgcolor = "transparent",
+    margin = list(t = 10, b = 10, l = 0, r = 0)
+  ) %>%
+  config(displayModeBar = FALSE, responsive = TRUE)
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Mapa mundial — accionistas por tipo específico de propiedad"),
+  htmltools::div(
+    id = "mapa-controles-ownership-specific",
+    style = "display:flex; align-items:center; margin-bottom:16px;",
+    htmltools::div(
+      id = "mapa-botones-var-ownership-specific",
+      style = "display:flex; gap:8px;",
+      lapply(names(variables_num_mapa_ownership_specific), function(v) {
+        htmltools::tags$button(
+          class = paste("toggle-btn", if (identical(v, var_inicial_mapa_ownership_specific)) "active" else ""),
+          `data-var` = v,
+          variables_num_mapa_ownership_specific[[v]]
+        )
+      })
+    ),
+    htmltools::tags$select(
+      id = "mapa-selector-tipologia-ownership-specific",
+      class = "select-box",
+      htmltools::tags$option(value = "Todas las tipologías", "Todas las tipologías"),
+      lapply(tipologias_mapa_ownership_specific, function(t) htmltools::tags$option(value = t, t))
+    )
+  ),
+  htmltools::div(id = "mapa_sintesis_ownership_specific_container", mapa_accionistas_ownership_specific)
+)
+```
+
+```{r}
+datos_mapa_ownership_specific_json <- jsonlite::toJSON(datos_mapa_ownership_specific, auto_unbox = TRUE, na = "null")
+
+cat(paste0('
+<script>
+window.DATOS_MAPA_SINTESIS_OWNERSHIP_SPECIFIC = ', datos_mapa_ownership_specific_json, ';
+</script>
+'))
+```
+
+```{=html}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var datosOwnershipSpecific         = window.DATOS_MAPA_SINTESIS_OWNERSHIP_SPECIFIC || {};
+  var contenedorOwnershipSpecific     = document.getElementById("mapa_sintesis_ownership_specific_container");
+  var botonesOwnershipSpecific        = document.querySelectorAll("#mapa-botones-var-ownership-specific .toggle-btn");
+  var selectorTipologiaOwnershipSpecific = document.getElementById("mapa-selector-tipologia-ownership-specific");
+
+  var varActualOwnershipSpecific       = "total_count";
+  var tipologiaActualOwnershipSpecific = "Todas las tipologías";
+  var grafDivOwnershipSpecific         = null;
+
+  function actualizarMapaOwnershipSpecific() {
+    if (!grafDivOwnershipSpecific) return;
+    var d = datosOwnershipSpecific[varActualOwnershipSpecific] &&
+            datosOwnershipSpecific[varActualOwnershipSpecific][tipologiaActualOwnershipSpecific];
+    if (!d) return;
+    Plotly.restyle(grafDivOwnershipSpecific, { z: [d.z], text: [d.hovertext] }, [0]);
+  }
+
+  botonesOwnershipSpecific.forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      varActualOwnershipSpecific = btn.getAttribute("data-var");
+      botonesOwnershipSpecific.forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      actualizarMapaOwnershipSpecific();
+    });
+  });
+
+  selectorTipologiaOwnershipSpecific.addEventListener("change", function() {
+    tipologiaActualOwnershipSpecific = selectorTipologiaOwnershipSpecific.value;
+    actualizarMapaOwnershipSpecific();
+  });
+
+  var intentosOwnershipSpecific = 0;
+  var intervaloOwnershipSpecific = setInterval(function() {
+    intentosOwnershipSpecific++;
+    if (!grafDivOwnershipSpecific) grafDivOwnershipSpecific = contenedorOwnershipSpecific.querySelector(".plotly.html-widget");
+    if (grafDivOwnershipSpecific || intentosOwnershipSpecific > 40) clearInterval(intervaloOwnershipSpecific);
+  }, 150);
+});
+</script>
+```
+
+De manela análoga al último gráfico, el diagrama de barras presentado más abajo ilustra la composición por países de los accionistas según su ownership specific.
+
+```{r}
+# -----------------------------------------------------------
+# 1. Agrego los datos por país destino de inversión y ownership_specific
+#    (normalizo capitalización y trato "NA"/NA como "Sin dato")
+# -----------------------------------------------------------
+tabla_accionistas_filtrada_ownership_specific <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+
+
+tabla_grafico_accionistas_ownership_specific <- tabla_accionistas_filtrada_ownership_specific %>% 
+  group_by(country, ownership_specific) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename(
+    pais = country
+    )
+
+variables_num_ownership_specific <- c(
+  total_count = "Total de accionistas",
+  sum_value = "Valor total"
+)
+
+valores_ownership_specific <- sort(unique(tabla_grafico_accionistas_ownership_specific$ownership_specific))
+paises_ownership_specific <- sort(unique(tabla_grafico_accionistas_ownership_specific$pais))
+etiquetas_pais_ownership_specific <- setNames(valores_ownership_specific, valores_ownership_specific)  
+formato_moneda_ownership_specific <- function(x) paste0("$", scales::label_number(scale = 1e-3, accuracy = 0.1)(x), "m")
+formato_eje_accionistas_ownership_specific <- list(
+  total_count = list(tickformat = ",", tickprefix = "", fmt = scales::label_comma()),
+  sum_value = list(tickformat = ",.2s", tickprefix = "$", fmt = formato_moneda_ownership_specific)
+)  
+  
+tabla_completa_accionistas_ownership_specific <- tabla_grafico_accionistas_ownership_specific %>%
+  tidyr::complete(
+    pais = paises_ownership_specific, ownership_specific = valores_ownership_specific,
+    fill = list(total_count = 0, sum_value = 0)
+  ) %>%
+  select(pais, ownership_specific, total_count, sum_value) %>%
+  arrange(pais, ownership_specific)
+
+construir_datos_grafico_accionistas_ownership_specific <- function(var_col){
+  var_label <- variables_num_ownership_specific[[var_col]]
+  fmt <- formato_eje_accionistas_ownership_specific[[var_col]]$fmt
+  y_list <- list()
+  hovertext_list <- list()
+  for(own in valores_ownership_specific){
+    df_own <- tabla_completa_accionistas_ownership_specific %>%
+      filter(ownership_specific == own) %>%
+      arrange(match(pais, paises_ownership_specific))
+    y_list[[own]] <- df_own[[var_col]]
+    hovertext_list[[own]] <- paste0(
+      "<b>", df_own$pais, "</b><br>",
+      "Ownership specific: ", own, "<br>",
+      var_label, ": ", fmt(df_own[[var_col]])
+    )
+  }
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_accionistas_ownership_specific <- lapply(names(variables_num_ownership_specific), construir_datos_grafico_accionistas_ownership_specific)
+names(datos_por_var_accionistas_ownership_specific) <- names(variables_num_ownership_specific)
+```
+
+```{r}
+# -----------------------------------------------------------
+# 2. Gráfico base — una traza por ownership_specific, agrupadas por país
+# -----------------------------------------------------------
+
+var_inicial_accionistas_ownership_specific <- "total_count"
+id_grafico_accionistas_ownership_specific  <- "grafico_accionistas_ownership_specific"
+
+set.seed(456)  # semilla distinta a la del gráfico de ownership_structure
+colores_accionistas_ownership_specific <- setNames(
+  c("#97E74E", "#D0D5AC", "#DAD15F", "#D8C0D1", "#A54EDE", "#DB75C1", 
+"#8793D1", "#89D9DA", "#E17F67", "#78E09B"),
+  valores_ownership_specific
+)
+
+p_accionistas_ownership_specific <- plot_ly()
+
+for (own in valores_ownership_specific){
+  p_accionistas_ownership_specific <- p_accionistas_ownership_specific %>% add_trace(
+    type = "bar",
+    x = paises_ownership_specific,
+    y = datos_por_var_accionistas_ownership_specific[[var_inicial_accionistas_ownership_specific]]$y[[own]],
+    hovertext = datos_por_var_accionistas_ownership_specific[[var_inicial_accionistas_ownership_specific]]$hovertext[[own]],
+    hoverinfo = "text",
+    name = etiquetas_pais_ownership_specific[[own]],
+    marker = list(color = colores_accionistas_ownership_specific[[own]]),
+    visible = TRUE
+  )
+}
+
+n_trazas_accionistas_ownership_specific <- length(valores_ownership_specific)
+idx_trazas_accionistas_ownership_specific <- 0:(n_trazas_accionistas_ownership_specific - 1)
+
+# -----------------------------------------------------------
+# 3. Botones de variable
+# -----------------------------------------------------------
+
+botones_accionistas_ownership_specific <- lapply(names(variables_num_ownership_specific), function(v){
+  list(
+    method = "update",
+    args = list(
+      list(
+        y = unname(datos_por_var_accionistas_ownership_specific[[v]]$y[valores_ownership_specific]),
+        hovertext = unname(datos_por_var_accionistas_ownership_specific[[v]]$hovertext[valores_ownership_specific])
+      ),
+      list(
+        `yaxis.title.text` = unname(variables_num_ownership_specific[[v]]),
+        `yaxis.tickformat` = ".0%",
+        `yaxis.tickprefix`  = "",
+        autorange = TRUE
+      ),
+    idx_trazas_accionistas_ownership_specific
+    ),
+    label = variables_num_ownership_specific[[v]]
+  )
+})
+
+# -----------------------------------------------------------
+# 4. Layout
+# -----------------------------------------------------------
+
+p_accionistas_ownership_specific <- p_accionistas_ownership_specific %>% layout(
+  height = 550,
+  barmode = "stack",
+  barnorm = "fraction",
+  margin = list(t = 90, r = 40),
+  xaxis = list(title = NULL),
+  yaxis = list(
+    title = variables_num_ownership_specific[[var_inicial_accionistas_ownership_specific]],
+    tickformat = ".0%",
+    autorange = TRUE
+    ),
+  legend = list(title = list( text = "Ownership specific")),
+  updatemenus = list(
+    list(
+      type = "buttons",
+      direction = "right",
+      x = 0,
+      y = 1.15,
+      xanchor = "left",
+      buttons = botones_accionistas_ownership_specific
+    )
+  )
+) %>%
+  config(responsive = TRUE)
+
+p_accionistas_ownership_specific <- p_accionistas_ownership_specific %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Composición de la inversión por países, desglosada según la tipología específica (ownership specific) de los accionistas"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_ownership_specific",
+    style = "position:relative;",
+    p_accionistas_ownership_specific
+  )
+)
+```
+
+
+### Accionistas y grupos familiares
 
 De los 500 accionistas principales, algunos pertenecen a grupos familiares. El siguiente grafo muestra las conexiones de las principales familias inversores con las empresas en las que tienen participación. Como en el grafo anterior, puede filtrar los nodos separadamente por empresa o por familia.
 
@@ -3058,6 +3445,400 @@ document.addEventListener("DOMContentLoaded", function() {
 <div class="insight">
 Este grafo, a diferencia del anterior, es representado con un algoritmo de visualización ForceAtlas2. Esto permite distinguir mejor los grupos familiares más centrales, debido a la alta concentración de conexiones en algunas determinadas familias.
 </div>
+```
+
+En este gráfico veremos el total de empresas en los que los principales accionistas de tipo familiar tienen sus inversiones y el total del valor invertido.
+
+```{r}
+# -----------------------------------------------------------
+# 1. Agrego los datos por grupo familiar (ownership_family) y país
+# -----------------------------------------------------------
+tabla_grafico_accionistas_familias <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+  group_by(ownership_family, empresa_principal_pais) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename(
+    familia = ownership_family,
+    pais = empresa_principal_pais
+    ) %>%
+  filter(familia != "no")
+
+# Reutilizamos `variables_num` y `formato_moneda` ya definidos en el chunk
+# del gráfico por sectores. Si este chunk vive en un .Rmd distinto o antes
+# de aquel, descomenta las líneas siguientes:
+
+# variables_num <- c(
+#   total_count = "Empresas totales",
+#   sum_value = "Valor total"
+# )
+# formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+familias <- sort(unique(tabla_grafico_accionistas_familias$familia))
+paises_familias <- sort(unique(tabla_grafico_accionistas_familias$pais))
+etiquetas_pais_familias <- setNames(paises_familias, paises_familias)
+
+variables_num <- c(
+  total_count = "Número de empresas",
+  sum_value = "Valor invertido"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-3, accuracy = 0.1)(x), "m")
+
+formato_eje_accionistas_familias <- list(
+  total_count = list(tickformat = ",", tickprefix = "", fmt = scales::label_comma()),
+  sum_value = list(tickformat = ",.2s", tickprefix = "$", fmt = formato_moneda)
+)
+
+tabla_completa_accionistas_familias <- tabla_grafico_accionistas_familias %>%
+  tidyr::complete(
+    familia = familias, pais = paises_familias,
+    fill = list(total_count = 0, sum_value = 0)
+  ) %>%
+  select(familia, pais, total_count, sum_value) %>%
+  arrange(familia, pais)
+
+construir_datos_grafico_accionistas_familias <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  fmt <- formato_eje_accionistas_familias[[var_col]]$fmt
+  y_list <- list()
+  hovertext_list <- list()
+  for(p in paises_familias){
+    df_pais <- tabla_completa_accionistas_familias %>%
+      filter(pais == p) %>%
+      arrange(match(familia, familias))
+    y_list[[p]] <- df_pais[[var_col]]
+    hovertext_list[[p]] <- paste0(
+      "<b>", df_pais$familia, "</b><br>",
+      "País: ", p, "<br>",
+      var_label, ": ", fmt(df_pais[[var_col]])
+    )
+  }
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_accionistas_familias <- lapply(names(variables_num), construir_datos_grafico_accionistas_familias)
+names(datos_por_var_accionistas_familias) <- names(variables_num)
+```
+
+```{r}
+# -----------------------------------------------------------
+# 2. Gráfico base — una traza por país, agrupadas/apiladas por familia
+# -----------------------------------------------------------
+
+var_inicial_accionistas_familias <- "total_count"
+id_grafico_accionistas_familias   <- "grafico_accionistas_familias"
+
+# Generamos la paleta una vez y la fijamos con dput() para que sea
+# reproducible entre sesiones (set.seed no basta por la variación de
+# kmeans()/BLAS-LAPACK — ver nota de randomcoloR en el proyecto).
+set.seed(123)
+colores_accionistas_familias <- setNames(
+  c("#8B77D9", "#D5E1DB", "#77D9D1", "#71DF99", "#DEB5C4", "#DC57C8", 
+"#E66F69", "#83E753", "#C6E0A0", "#85A8D3", "#DADB53", "#CEAA75", 
+"#9840E5", "#D68DC9"),
+  paises_familias
+)
+# Una vez que te guste la paleta, reemplaza lo anterior por algo como:
+# colores_accionistas_familias <- setNames(
+#   c("#XXXXXX", "#XXXXXX", ...),
+#   paises_familias
+# )
+
+p_accionistas_familias <- plot_ly()
+
+for (p in paises_familias){
+  p_accionistas_familias <- p_accionistas_familias %>% add_trace(
+    type = "bar",
+    x = familias,
+    y = datos_por_var_accionistas_familias[[var_inicial_accionistas_familias]]$y[[p]],
+    hovertext = datos_por_var_accionistas_familias[[var_inicial_accionistas_familias]]$hovertext[[p]],
+    hoverinfo = "text",
+    name = etiquetas_pais_familias[[p]],
+    marker = list(color = colores_accionistas_familias[[p]]),
+    visible = TRUE
+  )
+}
+
+n_trazas_accionistas_familias <- length(paises_familias)
+idx_trazas_accionistas_familias <- 0:(n_trazas_accionistas_familias - 1)
+
+# -----------------------------------------------------------
+# 3. Botones de variable
+# -----------------------------------------------------------
+
+botones_accionistas_familias <- lapply(names(variables_num), function(v){
+  list(
+    method = "update",
+    args = list(
+      list(
+        y = unname(datos_por_var_accionistas_familias[[v]]$y[paises_familias]),
+        hovertext = unname(datos_por_var_accionistas_familias[[v]]$hovertext[paises_familias])
+      ),
+      list(
+        `yaxis.title.text` = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_accionistas_familias[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_accionistas_familias[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas_accionistas_familias
+    ),
+    label = variables_num[[v]]
+  )
+})
+
+# -----------------------------------------------------------
+# 4. Layout
+# -----------------------------------------------------------
+
+p_accionistas_familias <- p_accionistas_familias %>% layout(
+  height = 550,
+  barmode = "dodge",
+  margin = list(t = 90, r = 40),
+  xaxis = list(title = NULL),
+  yaxis = list(
+    title = variables_num[[var_inicial_accionistas_familias]],
+    tickformat = formato_eje_accionistas_familias[[var_inicial_accionistas_familias]]$tickformat,
+    tickprefix = formato_eje_accionistas_familias[[var_inicial_accionistas_familias]]$tickprefix,
+    autorange = TRUE
+  ),
+  legend = list(title = list(text = "Países")),
+  updatemenus = list(
+    list(
+      type = "buttons",
+      direction = "right",
+      x = 0,
+      y = 1.15,
+      xanchor = "left",
+      buttons = botones_accionistas_familias
+    )
+  )
+) %>%
+  config(responsive = TRUE)
+
+p_accionistas_familias <- p_accionistas_familias %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Composición de la inversión por grupos familiares, desglosada según países"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_familias",
+    style = "position:relative;",
+    p_accionistas_familias
+  )
+)
+```
+
+```{=html}
+<div class="insight">
+Recuerda que puedes filtrar los países en el gráfico haciendo doble click en un país de la leyenda. Para regresar al gráfico original, haz doble click de nuevo.
+</div>
+```
+
+Ahora presentamos un gráfico similar al anterior, pero deslgosado por sectores.
+
+```{r}
+# -----------------------------------------------------------
+# 1. Agrego los datos por grupo familiar (ownership_family) y sector
+# -----------------------------------------------------------
+tabla_grafico_accionistas_familias_sectores <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+  group_by(ownership_family, industry_reclassified_2) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename(
+    familia = ownership_family,
+    sector = industry_reclassified_2
+    ) %>%
+  filter(familia != "no")
+
+# Reutilizamos `variables_num` y `formato_moneda` ya definidos en el chunk
+# del gráfico por sectores/países. Si este chunk vive en un .Rmd distinto o
+# antes de aquellos, descomenta las líneas siguientes:
+
+# variables_num <- c(
+#   total_count = "Empresas totales",
+#   sum_value = "Valor total"
+# )
+# formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+familias_sectores <- sort(unique(tabla_grafico_accionistas_familias_sectores$familia))
+sectores_familias <- sort(unique(tabla_grafico_accionistas_familias_sectores$sector))
+etiquetas_sector_familias <- setNames(sectores_familias, sectores_familias)
+
+variables_num <- c(
+  total_count = "Número de empresas",
+  sum_value = "Valor invertido"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-3, accuracy = 0.1)(x), "m")
+
+formato_eje_accionistas_familias_sectores <- list(
+  total_count = list(tickformat = ",", tickprefix = "", fmt = scales::label_comma()),
+  sum_value = list(tickformat = ",.2s", tickprefix = "$", fmt = formato_moneda)
+)
+
+tabla_completa_accionistas_familias_sectores <- tabla_grafico_accionistas_familias_sectores %>%
+  tidyr::complete(
+    familia = familias_sectores, sector = sectores_familias,
+    fill = list(total_count = 0, sum_value = 0)
+  ) %>%
+  select(familia, sector, total_count, sum_value) %>%
+  arrange(familia, sector)
+
+construir_datos_grafico_accionistas_familias_sectores <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  fmt <- formato_eje_accionistas_familias_sectores[[var_col]]$fmt
+  y_list <- list()
+  hovertext_list <- list()
+  for(sec in sectores_familias){
+    df_sec <- tabla_completa_accionistas_familias_sectores %>%
+      filter(sector == sec) %>%
+      arrange(match(familia, familias_sectores))
+    y_list[[sec]] <- df_sec[[var_col]]
+    hovertext_list[[sec]] <- paste0(
+      "<b>", df_sec$familia, "</b><br>",
+      "Sector: ", sec, "<br>",
+      var_label, ": ", fmt(df_sec[[var_col]])
+    )
+  }
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_accionistas_familias_sectores <- lapply(names(variables_num), construir_datos_grafico_accionistas_familias_sectores)
+names(datos_por_var_accionistas_familias_sectores) <- names(variables_num)
+```
+
+```{r}
+# -----------------------------------------------------------
+# 2. Gráfico base — una traza por sector, agrupadas/apiladas por familia
+# -----------------------------------------------------------
+
+var_inicial_accionistas_familias_sectores <- "total_count"
+id_grafico_accionistas_familias_sectores   <- "grafico_accionistas_familias_sectores"
+
+# Reutilizamos la paleta ya fijada para sectores (`colores_accionistas_sectores`,
+# definida en el gráfico de países x sectores) para que el color de cada
+# sector sea consistente entre gráficos. Si ese objeto no está disponible
+# en este .Rmd, descomenta el bloque de abajo para generarla/fijarla aquí.
+
+# set.seed(123)
+# colores_accionistas_familias_sectores <- setNames(
+#   c("#D8DFBA", "#D792DE", "#8450E1", "#8A578E", "#E24FD4", "#7CCDD1","#819EDC", "#D79966", "#E0627D", "#80DCA1", "#D9BFD0", "#D5D65F",
+# "#8AE95A"),
+#   sectores_familias
+# )
+colores_accionistas_familias_sectores <- setNames(
+  c("#DD5AD3", "#D6DCAF", "#6B9467", "#7CE79F", "#E28560", "#AC8BDD", 
+"#7FA5D1", "#86E0DC", "#DA7AA3", "#DBCDD7", "#8446DF", "#97E74C", 
+"#DBD35F"),
+sectores_familias
+)
+
+p_accionistas_familias_sectores <- plot_ly()
+
+for (sec in sectores_familias){
+  p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>% add_trace(
+    type = "bar",
+    x = familias_sectores,
+    y = datos_por_var_accionistas_familias_sectores[[var_inicial_accionistas_familias_sectores]]$y[[sec]],
+    hovertext = datos_por_var_accionistas_familias_sectores[[var_inicial_accionistas_familias_sectores]]$hovertext[[sec]],
+    hoverinfo = "text",
+    name = etiquetas_sector_familias[[sec]],
+    marker = list(color = colores_accionistas_familias_sectores[[sec]]),
+    visible = TRUE
+  )
+}
+
+n_trazas_accionistas_familias_sectores <- length(sectores_familias)
+idx_trazas_accionistas_familias_sectores <- 0:(n_trazas_accionistas_familias_sectores - 1)
+
+# -----------------------------------------------------------
+# 3. Botones de variable
+# -----------------------------------------------------------
+
+botones_accionistas_familias_sectores <- lapply(names(variables_num), function(v){
+  list(
+    method = "update",
+    args = list(
+      list(
+        y = unname(datos_por_var_accionistas_familias_sectores[[v]]$y[sectores_familias]),
+        hovertext = unname(datos_por_var_accionistas_familias_sectores[[v]]$hovertext[sectores_familias])
+      ),
+      list(
+        `yaxis.title.text` = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_accionistas_familias_sectores[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_accionistas_familias_sectores[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas_accionistas_familias_sectores
+    ),
+    label = variables_num[[v]]
+  )
+})
+
+# -----------------------------------------------------------
+# 4. Layout
+# -----------------------------------------------------------
+
+p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>% layout(
+  height = 550,
+  barmode = "dodge",
+  margin = list(t = 90, r = 40),
+  xaxis = list(title = NULL),
+  yaxis = list(
+    title = variables_num[[var_inicial_accionistas_familias_sectores]],
+    tickformat = formato_eje_accionistas_familias_sectores[[var_inicial_accionistas_familias_sectores]]$tickformat,
+    tickprefix = formato_eje_accionistas_familias_sectores[[var_inicial_accionistas_familias_sectores]]$tickprefix,
+    autorange = TRUE
+  ),
+  legend = list(title = list(text = "Sectores")),
+  updatemenus = list(
+    list(
+      type = "buttons",
+      direction = "right",
+      x = 0,
+      y = 1.15,
+      xanchor = "left",
+      buttons = botones_accionistas_familias_sectores
+    )
+  )
+) %>%
+  config(responsive = TRUE)
+
+p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Composición de la inversión por grupos familiares, desglosada según sectores"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_familias_sectores",
+    style = "position:relative;",
+    p_accionistas_familias_sectores
+  )
+)
 ```
 
 
