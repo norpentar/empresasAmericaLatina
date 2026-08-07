@@ -886,7 +886,7 @@ p_grafico_empresas_boxplot <- plot_ly() %>%
   ) %>%
   layout(
     title = NULL,
-    height = 800,
+    height = 700,
     margin = list(t = 90, r = 40),
     hovermode = "closest",
     xaxis = list (title = NULL, tickangle = -30),
@@ -909,8 +909,8 @@ p_grafico_empresas_boxplot <- plot_ly() %>%
 p_grafico_empresas_boxplot <- p_grafico_empresas_boxplot %>%
   htmlwidgets::onRender(
     "function(el) {
-      el.style.height = '800px';
-      if (el.parentElement) { el.parentElement.style.height = '800px'; }
+      el.style.height = '700px';
+      if (el.parentElement) { el.parentElement.style.height = '700px'; }
     }"
   )
 
@@ -2496,7 +2496,296 @@ htmltools::div(
 )
 ```
 
-### Tipologías de los accionistas
+### Tipología de los accionistas
+
+Para los 500 accionistas más importantes de las empresas hemos establecido una tipología que nos ayudará a comprender cómo se estructuran los inversores. El siguiente gráfico ilustra el número total de accionistas y su valor total invertido según su ownership strucuture.
+
+```{r}
+# Ownership structure y accionistas.
+tabla_grafico_accionistas_ownership_structure <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+  group_by(ownership_structure) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE)
+    )
+
+variables_num <- c(
+  total_count = "Total accionistas",
+  sum_value = "Valor invertido"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+formato_eje_accionistas_ownership_structure <- list(
+  total_count     = list(tickformat = ",",    tickprefix = "", fmt = scales::label_comma()),
+  sum_value    = list(tickformat = ",.2s",  tickprefix = "$", fmt = formato_moneda)
+
+)
+
+label_auto <- scales::label_number(scale_cut = scales::cut_short_scale())
+
+
+valores_ownership_structure <- sort(unique(tabla_grafico_accionistas_ownership_structure$ownership_structure))
+
+colores_ownership_structure <- setNames(c("#B7D96F", "#BC5ED6", "#CD93AB", "#A8D5CF"), valores_ownership_structure)
+
+vectorColores <- function(df, var_col, colores){
+  colores_df <- tibble(campo = names(colores), color = colores)
+  vector <- df %>% left_join(colores_df, by = join_by(!!sym(var_col) == campo)) %>%
+    pull(color)
+  return(unname(vector))
+}
+
+
+# --- 3. Construye datos por trace (variable numérica) -------------
+construir_datos_grafico_accionistas_ownership_structure <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  y_list <- list()
+  hovertext_list <- list()
+  
+  y_list <- tabla_grafico_accionistas_ownership_structure[[var_col]]
+  hovertext_list <- paste0(
+      "<b>", tabla_grafico_accionistas_ownership_structure$ownership_structure, "</b><br>",
+      var_label, ": ", formato_eje_accionistas_ownership_structure[[var_col]]$fmt(tabla_grafico_accionistas_ownership_structure[[var_col]])
+      )
+  
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_grafico_accionistas_ownership_structure <- lapply(names(variables_num), construir_datos_grafico_accionistas_ownership_structure)
+names(datos_por_var_grafico_accionistas_ownership_structure) <- names(variables_num)
+
+variable_inicial_grafico_accionistas_ownership_structure <- "total_count"
+id_grafico_accionistas_structure <- "grafico_accionistas_ownership_structure"
+
+idx_trazas <- 0
+
+botones_grafico_accionistas_ownership_structure <- lapply(names(variables_num), function(v){
+ list(
+   method = "update",
+   args = list(
+     list(
+      y = list(unname(datos_por_var_grafico_accionistas_ownership_structure[[v]]$y)),
+      hovertext = list(unname(datos_por_var_grafico_accionistas_ownership_structure[[v]]$hovertext))
+     ),
+     list(
+        `yaxis.title.text`  = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_accionistas_ownership_structure[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_accionistas_ownership_structure[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas
+    ),
+  label = variables_num[[v]]
+ )
+  
+})
+
+# --- 4. Gráfico ---------------------------------------------------
+
+p_grafico_accionistas_ownership_structure <- plot_ly() %>%
+  add_trace(
+    type = "bar",
+    x = tabla_grafico_accionistas_ownership_structure$ownership_structure,
+    y = datos_por_var_grafico_accionistas_ownership_structure[[variable_inicial_grafico_accionistas_ownership_structure]]$y,
+    hovertext = datos_por_var_grafico_accionistas_ownership_structure[[variable_inicial_grafico_accionistas_ownership_structure]]$hovertext,
+    hoverinfo = "text",
+    name = variables_num[[variable_inicial_grafico_accionistas_ownership_structure]],
+    marker = list(color = vectorColores(tabla_grafico_accionistas_ownership_structure, "ownership_structure", colores_ownership_structure)),
+    showlegend = FALSE,
+    visible = TRUE
+  ) %>%
+  layout(
+    height = 550,
+    barmode = "stack",
+    margin = list(t = 90, r = 40),
+    xaxis = list(title = NULL),
+    yaxis = list(
+      title = variables_num[[variable_inicial_grafico_accionistas_ownership_structure]],
+      tickformat = formato_eje_accionistas_ownership_structure[[variable_inicial_grafico_accionistas_ownership_structure]]$tickformat,
+      tickprefix = formato_eje_accionistas_ownership_structure[[variable_inicial_grafico_accionistas_ownership_structure]]$tickprefix,
+      autorange = TRUE
+    ),
+    updatemenus = list(
+      list(
+        type = "buttons",
+        direction = "right",
+        x = 0,
+        y = 1.15,
+        xanchor = "left",
+        buttons = botones_grafico_accionistas_ownership_structure
+      )
+    )
+  ) %>%
+  config(responsive = TRUE)
+
+p_grafico_accionistas_ownership_structure <- p_grafico_accionistas_ownership_structure %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Accionistas según su ownership structure"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_ownership_structure",
+    style = "position:relative;",
+    p_grafico_accionistas_ownership_structure
+  )
+)
+```
+
+
+El siguiente gráfico hace lo propio con la variable ownership specific de la tipología establecida.
+
+```{r}
+# Ownership specific y accionistas.
+tabla_grafico_accionistas_ownership_specific <- tabla_accionistas %>%
+  arrange(investor_name) %>%
+  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
+  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+  group_by(ownership_specific) %>%
+  summarise(
+    total_count = n(),
+    sum_value = sum(value, na.rm = TRUE)
+    )
+
+variables_num <- c(
+  total_count = "Total accionistas",
+  sum_value = "Valor invertido"
+)
+
+formato_moneda <- function(x) paste0("$", scales::label_number(scale = 1e-6, accuracy = 0.1)(x), "M")
+
+formato_eje_accionistas_ownership_specific <- list(
+  total_count     = list(tickformat = ",",    tickprefix = "", fmt = scales::label_comma()),
+  sum_value    = list(tickformat = ",.2s",  tickprefix = "$", fmt = formato_moneda)
+
+)
+
+label_auto <- scales::label_number(scale_cut = scales::cut_short_scale())
+
+
+valores_ownership_specific <- sort(unique(tabla_grafico_accionistas_ownership_specific$ownership_specific))
+
+colores_ownership_specific <- setNames(c("#D1C8CE", "#B3E058", "#AB8ED3", "#D7C17F", "#C24FD7", "#82D1DB", 
+"#DC6F7E", "#8EE1AA"), valores_ownership_specific)
+
+vectorColores <- function(df, var_col, colores){
+  colores_df <- tibble(campo = names(colores), color = colores)
+  vector <- df %>% left_join(colores_df, by = join_by(!!sym(var_col) == campo)) %>%
+    pull(color)
+  return(unname(vector))
+}
+
+
+# --- 3. Construye datos por trace (variable numérica) -------------
+construir_datos_grafico_accionistas_ownership_specific <- function(var_col){
+  var_label <- variables_num[[var_col]]
+  y_list <- list()
+  hovertext_list <- list()
+  
+  y_list <- tabla_grafico_accionistas_ownership_specific[[var_col]]
+  hovertext_list <- paste0(
+      "<b>", tabla_grafico_accionistas_ownership_specific$ownership_specific, "</b><br>",
+      var_label, ": ", formato_eje_accionistas_ownership_specific[[var_col]]$fmt(tabla_grafico_accionistas_ownership_specific[[var_col]])
+      )
+  
+  list(y = y_list, hovertext = hovertext_list)
+}
+
+datos_por_var_grafico_accionistas_ownership_specific <- lapply(names(variables_num), construir_datos_grafico_accionistas_ownership_specific)
+names(datos_por_var_grafico_accionistas_ownership_specific) <- names(variables_num)
+
+variable_inicial_grafico_accionistas_ownership_specific <- "total_count"
+id_grafico_accionistas_structure <- "grafico_accionistas_ownership_specific"
+
+idx_trazas <- 0
+
+botones_grafico_accionistas_ownership_specific <- lapply(names(variables_num), function(v){
+ list(
+   method = "update",
+   args = list(
+     list(
+      y = list(unname(datos_por_var_grafico_accionistas_ownership_specific[[v]]$y)),
+      hovertext = list(unname(datos_por_var_grafico_accionistas_ownership_specific[[v]]$hovertext))
+     ),
+     list(
+        `yaxis.title.text`  = unname(variables_num[[v]]),
+        `yaxis.tickformat`  = formato_eje_accionistas_ownership_specific[[v]]$tickformat,
+        `yaxis.tickprefix`  = formato_eje_accionistas_ownership_specific[[v]]$tickprefix,
+        `yaxis.autorange`   = TRUE
+      ),
+    idx_trazas
+    ),
+  label = variables_num[[v]]
+ )
+  
+})
+
+# --- 4. Gráfico ---------------------------------------------------
+
+p_grafico_accionistas_ownership_specific <- plot_ly() %>%
+  add_trace(
+    type = "bar",
+    x = tabla_grafico_accionistas_ownership_specific$ownership_specific,
+    y = datos_por_var_grafico_accionistas_ownership_specific[[variable_inicial_grafico_accionistas_ownership_specific]]$y,
+    hovertext = datos_por_var_grafico_accionistas_ownership_specific[[variable_inicial_grafico_accionistas_ownership_specific]]$hovertext,
+    hoverinfo = "text",
+    name = variables_num[[variable_inicial_grafico_accionistas_ownership_specific]],
+    marker = list(color = vectorColores(tabla_grafico_accionistas_ownership_specific, "ownership_specific", colores_ownership_specific)),
+    showlegend = FALSE,
+    visible = TRUE
+  ) %>%
+  layout(
+    height = 550,
+    barmode = "stack",
+    margin = list(t = 90, r = 40),
+    xaxis = list(title = NULL),
+    yaxis = list(
+      title = variables_num[[variable_inicial_grafico_accionistas_ownership_specific]],
+      tickformat = formato_eje_accionistas_ownership_specific[[variable_inicial_grafico_accionistas_ownership_specific]]$tickformat,
+      tickprefix = formato_eje_accionistas_ownership_specific[[variable_inicial_grafico_accionistas_ownership_specific]]$tickprefix,
+      autorange = TRUE
+    ),
+    updatemenus = list(
+      list(
+        type = "buttons",
+        direction = "right",
+        x = 0,
+        y = 1.15,
+        xanchor = "left",
+        buttons = botones_grafico_accionistas_ownership_specific
+      )
+    )
+  ) %>%
+  config(responsive = TRUE)
+
+p_grafico_accionistas_ownership_specific <- p_grafico_accionistas_ownership_specific %>%
+  htmlwidgets::onRender(
+    "function(el) {
+      el.style.height = '550px';
+      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+    }"
+  )
+
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Accionistas según su ownership specific"),
+  htmltools::div(
+    id = "contenedor_grafico_accionistas_ownership_specific",
+    style = "position:relative;",
+    p_grafico_accionistas_ownership_specific
+  )
+)
+```
+
 
 Examinemos mejor la distribución espacial de los accionistas según su estructura de propiedad (ownership structure) En el mapa de abajo podemos seleccionar el tipo de accionista para ver su número total y su valor de inversión acumulado.
 
@@ -3459,7 +3748,7 @@ tabla_grafico_accionistas_familias <- tabla_accionistas %>%
   inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
   group_by(ownership_family, empresa_principal_pais) %>%
   summarise(
-    total_count = n(),
+    total_count = n_distinct(empresa_principal),
     sum_value = sum(value, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -3597,7 +3886,7 @@ botones_accionistas_familias <- lapply(names(variables_num), function(v){
 # -----------------------------------------------------------
 
 p_accionistas_familias <- p_accionistas_familias %>% layout(
-  height = 550,
+  height = 700,
   barmode = "dodge",
   margin = list(t = 90, r = 40),
   xaxis = list(title = NULL),
@@ -3624,8 +3913,8 @@ p_accionistas_familias <- p_accionistas_familias %>% layout(
 p_accionistas_familias <- p_accionistas_familias %>%
   htmlwidgets::onRender(
     "function(el) {
-      el.style.height = '550px';
-      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+      el.style.height = '700px';
+      if (el.parentElement) { el.parentElement.style.height = '700px'; }
     }"
   )
 
@@ -3658,7 +3947,7 @@ tabla_grafico_accionistas_familias_sectores <- tabla_accionistas %>%
   inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
   group_by(ownership_family, industry_reclassified_2) %>%
   summarise(
-    total_count = n(),
+    total_count = n_distinct(empresa_principal),
     sum_value = sum(value, na.rm = TRUE),
     .groups = "drop"
   ) %>%
@@ -3798,7 +4087,7 @@ botones_accionistas_familias_sectores <- lapply(names(variables_num), function(v
 # -----------------------------------------------------------
 
 p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>% layout(
-  height = 550,
+  height = 700,
   barmode = "dodge",
   margin = list(t = 90, r = 40),
   xaxis = list(title = NULL),
@@ -3825,8 +4114,8 @@ p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>% layout(
 p_accionistas_familias_sectores <- p_accionistas_familias_sectores %>%
   htmlwidgets::onRender(
     "function(el) {
-      el.style.height = '550px';
-      if (el.parentElement) { el.parentElement.style.height = '550px'; }
+      el.style.height = '700px';
+      if (el.parentElement) { el.parentElement.style.height = '700px'; }
     }"
   )
 
