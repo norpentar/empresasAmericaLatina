@@ -104,7 +104,38 @@ personalized_bar <- function(column, tabla, color) {
   )
 }
 
-
+refinaAccionistasPrincipales <- function(
+    tabla_accionistas_in,
+    tabla_empresas,
+    ruta_archivo_1 = here::here("tablas_input", "auxiliares", "tabla_info_accionistas.xlsx"),
+    ruta_archivo_2 = here::here("tablas_input", "auxiliares", "accionistas_principales_refinado.xlsx")
+    ){
+  
+  tabla_accionistas <- tabla_accionistas_in
+  tabla_info_accionistas <- read_excel(ruta_archivo_1)
+  tabla_accionistas_refinado <- read_excel(ruta_archivo_2)
+  
+  tabla_accionistas_filtrada <- tabla_accionistas %>%
+    arrange(investor_name) %>%
+    inner_join(tabla_info_accionistas %>%
+      select(
+        investor_name, ownership_structure, ownership_specific, ownership_family, principal_activity, finance, country, region
+        ),
+      by = "investor_name") %>%
+    inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+    left_join(tabla_accionistas_refinado %>%
+                select(investor_name, holder_name, mod_ownership_structure, mod_ownership_specific, mod_ownership_family),
+              by = "investor_name"
+              ) %>%
+    mutate(
+      ownership_structure = mod_ownership_structure,
+      ownership_specific = mod_ownership_specific,
+      ownership_family = mod_ownership_family
+           ) %>%
+    select(-c(mod_ownership_structure, mod_ownership_specific, mod_ownership_family))
+  
+  return(tabla_accionistas_filtrada)
+}
 
 
 

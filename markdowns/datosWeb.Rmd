@@ -4,8 +4,14 @@ author: "Iñigo Arrazola para Wealth and Space"
 date: "2026-07-25"
 output:
   html_document:
-    theme: null
+    theme: cosmo
     df_print: default
+    toc: true
+    toc_float:
+      collapsed: false      # muestra todos los niveles desplegados desde el inicio
+      smooth_scroll: true   # scroll animado al hacer click en un ítem de la TOC
+    toc_depth: 3
+    number_sections: false
 ---
 
 ```{r setup, include=FALSE}
@@ -240,6 +246,67 @@ p { margin: 0 0 16px; }
     flex-wrap: wrap;
     overflow-x: visible;
   }
+}
+
+/* Para la tabla de contenidos ----------- */
+
+/* Corrige el tamaño de letra que encoge el tema cosmo (afecta a reactable) */
+html {
+  font-size: 16px !important;
+}
+
+body {
+  max-width: calc(var(--max) + 300px) !important;
+}
+
+div.container-fluid.main-container {
+  max-width: none !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+.row {
+  margin: 0 !important;
+}
+.row > div.col-xs-12.col-sm-4.col-md-3 {
+  width: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.toc-content.col-xs-12.col-sm-8.col-md-9 {
+  width: 100% !important;
+  max-width: var(--max) !important;
+  margin-left: 300px !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* El TOC ahora sigue al borde izquierdo del body centrado,
+   no al borde de la ventana */
+.tocify {
+  width: 260px !important;
+  left: max(20px, calc((100vw - (var(--max) + 300px)) / 2 + 32px)) !important;
+  margin-left: 0 !important;
+}
+
+@media (max-width: 1400px) {
+  body {
+    max-width: var(--max) !important;
+  }
+  .toc-content.col-xs-12.col-sm-8.col-md-9 {
+    margin-left: 0 !important;
+  }
+  .tocify {
+    position: static !important;
+    width: 100% !important;
+    left: auto !important;
+  }
+}
+
+@media (max-width: 720px) {
+  body { padding: 0 18px 60px; }
+  .card { padding: 18px 16px 14px; }
 }
 
 /* ── Responsive ────────────────────────────────────────────── */
@@ -1945,10 +2012,7 @@ reactable(
 A continuación mostramos algunos datos de los 500 accionistas más importantes de las principales empresas. En el siguiente mapa puede visualizar, según el menú de selección, el origen de los mismos, los países donde invierten, y la cantidad invertidad por sector en cada país.
 
 ```{r}
-tabla_accionistas_filtrada <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 tabla_origen_paises <- tabla_accionistas_filtrada %>% group_by(country_region) %>%
   summarise(
@@ -2165,10 +2229,9 @@ Con ayuda del siguiente grafo podemos explorar mejor los vínculos entre los 500
 # 1. DATOS DE NODOS Y RELACIONES.
 # Los datos provienen de la base neo4j.
 # ------------------------------------------------------------
-tabla_accionistas_filtrada <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
-  filter(outstanding > 0.1)
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+  
+tabla_accionistas_filtrada <- tabla_accionistas_filtrada %>% filter(outstanding > 0.1)
 
 nodes_grafo_accionistas <- bind_rows(
           tibble(id = unique(tabla_accionistas_filtrada$empresa_principal), group = "Empresa"),
@@ -2325,10 +2388,7 @@ En el siguiente gráfico podemos ver la composición por sector de las inversion
 # 1. Agrego los datos por país destino de inversión y sector
 #    (normalizo capitalización y trato "NA"/NA como "Sin dato")
 # -----------------------------------------------------------
-tabla_accionistas_filtrada <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  filter(investor_name %in% tabla_info_accionistas$investor_name) %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 tabla_grafico_accionistas_sectores <- tabla_accionistas_filtrada %>% 
   group_by(empresa_principal_pais, industry_reclassified_2) %>%
@@ -2502,10 +2562,9 @@ Para los 500 accionistas más importantes de las empresas hemos establecido una 
 
 ```{r}
 # Ownership structure y accionistas.
-tabla_grafico_accionistas_ownership_structure <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+tabla_accionstas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_grafico_accionistas_ownership_structure <- tabla_accionstas_filtrada %>%
   group_by(ownership_structure) %>%
   summarise(
     total_count = n(),
@@ -2646,10 +2705,9 @@ El siguiente gráfico hace lo propio con la variable ownership specific de la ti
 
 ```{r}
 # Ownership specific y accionistas.
-tabla_grafico_accionistas_ownership_specific <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_grafico_accionistas_ownership_specific <- tabla_accionistas_filtrada %>%
   group_by(ownership_specific) %>%
   summarise(
     total_count = n(),
@@ -2786,6 +2844,12 @@ htmltools::div(
 )
 ```
 
+```{=html}
+<div class="insight">
+El gráfico nos muestra cómo, en número, los accionistas tipo parent firm (empresas) tiene más importancia. Sin embargo, en capital invertido, los accionistas familiares tienen mayor relevancia. Más abajo examinaremos con detalle estos dos tipos de accionistas.
+</div>
+```
+
 
 Examinemos mejor la distribución espacial de los accionistas según su estructura de propiedad (ownership structure) En el mapa de abajo podemos seleccionar el tipo de accionista para ver su número total y su valor de inversión acumulado.
 
@@ -2796,10 +2860,7 @@ Examinemos mejor la distribución espacial de los accionistas según su estructu
 
 # Si necesitaras cargarla desde el csv en vez de tenerla ya en el entorno:
 # tabla_accionistas_ownership_structure <- read.csv(here::here("tablas_input", "tabla_accionistas_ownership_structure.csv"))
-tabla_accionistas_filtrada <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 
 tabla_mapa_ownership <- tabla_accionistas_filtrada %>% 
@@ -3004,10 +3065,7 @@ En el siguiente gráfico podemos ver la composición por país de los accionista
 # 1. Agrego los datos por país destino de inversión y sector
 #    (normalizo capitalización y trato "NA"/NA como "Sin dato")
 # -----------------------------------------------------------
-tabla_accionistas_filtrada <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 
 tabla_grafico_accionistas_ownership_structure <- tabla_accionistas_filtrada %>% 
@@ -3181,13 +3239,10 @@ A continuación mostramos un mapa similar al anterior, con la distribución espa
 # 1. Datos base — mapa de accionistas por ownership_specific
 # -----------------------------------------------------------
 
-tabla_accionistas_filtrada_ownership_specific <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 
-tabla_mapa_ownership_specific <- tabla_accionistas_filtrada_ownership_specific %>% 
+tabla_mapa_ownership_specific <- tabla_accionistas_filtrada %>% 
   group_by(country, ownership_specific) %>%
   summarise(
     total_count = n(),
@@ -3381,20 +3436,16 @@ document.addEventListener("DOMContentLoaded", function() {
 </script>
 ```
 
-De manela análoga al último gráfico, el diagrama de barras presentado más abajo ilustra la composición por países de los accionistas según su ownership specific.
+De manera análoga al último gráfico, el diagrama de barras presentado más abajo ilustra la composición por países de los accionistas según su ownership specific.
 
 ```{r}
 # -----------------------------------------------------------
 # 1. Agrego los datos por país destino de inversión y ownership_specific
 #    (normalizo capitalización y trato "NA"/NA como "Sin dato")
 # -----------------------------------------------------------
-tabla_accionistas_filtrada_ownership_specific <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name"))
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
-
-tabla_grafico_accionistas_ownership_specific <- tabla_accionistas_filtrada_ownership_specific %>% 
+tabla_grafico_accionistas_ownership_specific <- tabla_accionistas_filtrada %>% 
   group_by(country, ownership_specific) %>%
   summarise(
     total_count = n(),
@@ -3555,7 +3606,6 @@ htmltools::div(
 )
 ```
 
-
 ### Accionistas y grupos familiares
 
 De los 500 accionistas principales, algunos pertenecen a grupos familiares. El siguiente grafo muestra las conexiones de las principales familias inversores con las empresas en las que tienen participación. Como en el grafo anterior, puede filtrar los nodos separadamente por empresa o por familia.
@@ -3565,9 +3615,9 @@ De los 500 accionistas principales, algunos pertenecen a grupos familiares. El s
 # 1. DATOS DE NODOS Y RELACIONES.
 # Los datos provienen de la base neo4j.
 # ------------------------------------------------------------
-tabla_accionistas_filtrada_familias <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas, by = "investor_name") %>%
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_accionistas_filtrada_familias <- tabla_accionistas_filtrada %>%
   filter(ownership_family != "no")
 
 nodes_grafo_accionistas_familias <- bind_rows(
@@ -3742,10 +3792,9 @@ En este gráfico veremos el total de empresas en los que los principales accioni
 # -----------------------------------------------------------
 # 1. Agrego los datos por grupo familiar (ownership_family) y país
 # -----------------------------------------------------------
-tabla_grafico_accionistas_familias <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_grafico_accionistas_familias <- tabla_accionistas_filtrada %>%
   group_by(ownership_family, empresa_principal_pais) %>%
   summarise(
     total_count = n_distinct(empresa_principal),
@@ -3941,10 +3990,9 @@ Ahora presentamos un gráfico similar al anterior, pero deslgosado por sectores.
 # -----------------------------------------------------------
 # 1. Agrego los datos por grupo familiar (ownership_family) y sector
 # -----------------------------------------------------------
-tabla_grafico_accionistas_familias_sectores <- tabla_accionistas %>%
-  arrange(investor_name) %>%
-  inner_join(tabla_info_accionistas %>% select(investor_name, ownership_structure, ownership_specific, ownership_family, country), by = "investor_name") %>%
-  inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_grafico_accionistas_familias_sectores <- tabla_accionistas_filtrada %>%
   group_by(ownership_family, industry_reclassified_2) %>%
   summarise(
     total_count = n_distinct(empresa_principal),
@@ -4130,6 +4178,19 @@ htmltools::div(
 )
 ```
 
+### Accionistas empresariales (parent firm)
+
+A continuación analizamos con más detalle este tipo de accionistas.
+
+```{r}
+tabla_accionitas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+
+
+
+
+
+```
 
 
 ```{=html}

@@ -24,6 +24,7 @@ lista_empresas_principales$cargaCurrenciesPaisesEmpresas()
 lista_empresas_principales <- procesaFinancials(lista_empresas_principales_in = lista_empresas_principales)
 lista_empresas_principales$rectificaFinancialsEmpresas()
 
+
 #ajusto valores a dólares en año base 2023.
 lista_empresas_principales$ajustaShareholdersEmpresas()
 lista_empresas_principales$ajustaTreeStructureEmpresas()
