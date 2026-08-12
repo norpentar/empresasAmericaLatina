@@ -1701,11 +1701,13 @@ ListaEntidades <- R6Class("ListaEntidades",
       return(lista_entidades_out)
     },
     verificaEntidadLista = function (nombre_entidad){
-      nombre_entidad <- gsub("‘|’|'|-|–", " ", nombre_entidad) 
+      nombre_entidad <- parseaNombres(nombre_entidad)
+      
       return(exists(nombre_entidad, envir = private$.indice_entidades, inherits = FALSE))
     },
     extraeEntidadLista = function (nombre_entidad){
-      nombre_entidad <- gsub("‘|’|'|-|–", " ", nombre_entidad)
+      nombre_entidad <- parseaNombres(nombre_entidad)
+      
       #entidad_encontrada <- Filter(function(entidad) entidad$name == nombre_entidad, private$.entidades)
       #return(entidad_encontrada[[1]])
       if(self$verificaEntidadLista(nombre_entidad)){
@@ -1718,7 +1720,8 @@ ListaEntidades <- R6Class("ListaEntidades",
       }
     },
     extraeCreaEntidadLista = function(nombre_entidad, tipo = "empresa"){
-      nombre_entidad <- gsub("‘|’|'|-|–", " ", nombre_entidad)
+      nombre_entidad <- parseaNombres(nombre_entidad)
+      
       if(self$verificaEntidadLista(nombre_entidad)){
         return(self$extraeEntidadLista(nombre_entidad))
       }
@@ -2026,7 +2029,7 @@ ListaEntidades <- R6Class("ListaEntidades",
     rectificaValoresEmpresas = function(){
       #ajusto empresas que no tienen país.
       e1 <- "Hapvida Participacoes e Investimentos SA"
-      e2 <- "Pluz Energia Peru SAA"
+      e2 <- "Pluz Energia Peru SA"
       
       emp_1 <- self$extraeEntidadesNombre(e1)$entidades
       emp_2 <- self$extraeEntidadesNombre(e2)$entidades

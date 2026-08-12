@@ -5,7 +5,7 @@
 ##variables auxiliares
 library(readxl)
 
-tabla_monedas <- read_excel("./tablas_input/auxiliares/plantilla_monedas_rellenado.xlsx", sheet="tabla_monedas")
+tabla_monedas <- read_excel(here::here("tablas_input", "auxiliares", "plantilla_monedas_rellenado.xlsx"), sheet="tabla_monedas")
 
 
 ## funciones auxiliares
@@ -41,7 +41,7 @@ renombraFilasTabla <- function(tabla_in, columna_list, valor_list){
   
 }
 
-renombraFilasTablaVector <- function(tabla_in, columna = "investor_name", ruta_matriz = "./tablas_input/auxiliares/matriz_renombre_accionistas.xlsx"){
+renombraFilasTablaVector <- function(tabla_in, columna = "investor_name", ruta_matriz = here::here("tablas_input", "auxiliares", "matriz_renombre_accionistas.xlsx")){
   msg <- glue::glue("Entrando en la función renombraFilasTablaVector")
   log_trace_multi(msg, namespaces = c("auxiliares"))
   tabla <- tabla_in
@@ -165,7 +165,7 @@ verificaLoops <- function(treeStructrue_input_excel){
   
 }
 
-reclasificaIndustriaEmpresa <- function(industry, ruta_tabla_reclasificacion = "./tablas_input/auxiliares/recategorizacion_industrias_empresas.xlsx"){
+reclasificaIndustriaEmpresa <- function(industry, ruta_tabla_reclasificacion = here::here("tablas_input", "auxiliares", "recategorizacion_industrias_empresas.xlsx")){
   msg <- glue::glue("Entrando en la función reclasificaIndustriaEmpresa")
   log_trace_multi(msg, namespaces = c("auxiliares"))
   tabla <- read_excel(ruta_tabla_reclasificacion) %>% fill(everything())
@@ -174,7 +174,7 @@ reclasificaIndustriaEmpresa <- function(industry, ruta_tabla_reclasificacion = "
   return(industry_reclassifed)
 }
 
-procesaReclasificaIndustriaEmpresa2 <- function(lista_entidades_principales_in, ruta_tabla_reclasificacion = "./tablas_input/auxiliares/recategorizacion_industrias_empresas_2.xlsx"){
+procesaReclasificaIndustriaEmpresa2 <- function(lista_entidades_principales_in, ruta_tabla_reclasificacion = here::here("tablas_input", "auxiliares", "recategorizacion_industrias_empresas_2.xlsx")){
   msg <- glue::glue("Entrando en la función procesaReclasificaIndustriaEmpresa2")
   log_trace_multi(msg, namespaces = c("auxiliares"))
   lista_empresas_principales <- lista_entidades_principales_in
@@ -251,5 +251,21 @@ reconvierteValorInOutArray <- function(currency_in, currency_out, df_valor){
   }
   
   return(df_valor_ajustado)
+}
+
+parseaNombres <- function(vector_nombres_in){
+  vector_nombres <- vector_nombres_in
+  vector_nombres <- gsub("‘|’|'|-|–", " ", vector_nombres)
+  vector_nombres <- gsub(",", "", vector_nombres)
+  vector_nombres <- gsub("C\\.?V\\.?(?![A-Za-z])", "CV", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("L\\.?P\\.?(?![A-Za-z])", "LP", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("B\\.?V\\.?(?![A-Za-z])", "BV", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("L\\.?L\\.?C\\.?(?![A-Za-z])", "LLC", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("S\\.?A\\.?A\\.?(?![A-Za-z])", "SA", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("S\\.?A\\.?(?![A-Za-z])", " SA", vector_nombres, perl = TRUE)
+  vector_nombres <- gsub("S\\.?A\\.?C\\.?(?![A-Za-z])", " SAC", vector_nombres, perl = TRUE)
+  vector_nombres <- trimws(gsub("\\s+", " ", vector_nombres))
+  vector_nombres <- gsub("\\.$", "", vector_nombres)
+  return(vector_nombres)
 }
 

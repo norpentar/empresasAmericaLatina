@@ -112,8 +112,15 @@ refinaAccionistasPrincipales <- function(
     ){
   
   tabla_accionistas <- tabla_accionistas_in
-  tabla_info_accionistas <- read_excel(ruta_archivo_1)
-  tabla_accionistas_refinado <- read_excel(ruta_archivo_2)
+  tabla_info_accionistas <- read_excel(ruta_archivo_1) %>%
+    mutate(
+      investor_name = parseaNombres(investor_name)
+    )
+  
+  tabla_accionistas_refinado <- read_excel(ruta_archivo_2) %>%
+    mutate(
+      investor_name = parseaNombres(investor_name)
+    )
   
   tabla_accionistas_filtrada <- tabla_accionistas %>%
     arrange(investor_name) %>%
@@ -124,15 +131,18 @@ refinaAccionistasPrincipales <- function(
       by = "investor_name") %>%
     inner_join(tabla_empresas %>% select(name, industry_reclassified_2), by = c("empresa_principal" = "name")) %>%
     left_join(tabla_accionistas_refinado %>%
-                select(investor_name, holder_name, mod_ownership_structure, mod_ownership_specific, mod_ownership_family),
+                select(investor_name, mod_ownership_structure, mod_ownership_specific, mod_ownership_holder_or_family),
               by = "investor_name"
               ) %>%
+    rename(
+      ownership_holder_or_family = ownership_family
+    ) %>%
     mutate(
       ownership_structure = mod_ownership_structure,
       ownership_specific = mod_ownership_specific,
-      ownership_family = mod_ownership_family
+      ownership_holder_or_family = mod_ownership_holder_or_family
            ) %>%
-    select(-c(mod_ownership_structure, mod_ownership_specific, mod_ownership_family))
+    select(-c(mod_ownership_structure, mod_ownership_specific, mod_ownership_holder_or_family))
   
   return(tabla_accionistas_filtrada)
 }

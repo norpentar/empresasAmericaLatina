@@ -4,9 +4,9 @@ author: "Iñigo Arrazola para Wealth and Space"
 date: "2026-07-25"
 output:
   html_document:
-    theme: cosmo
+    theme: null
     df_print: default
-    toc: true
+    toc: false
     toc_float:
       collapsed: false      # muestra todos los niveles desplegados desde el inicio
       smooth_scroll: true   # scroll animado al hacer click en un ítem de la TOC
@@ -47,6 +47,7 @@ library(randomcoloR)
 
 
 source(here::here("scripts", "auxiliares_datosWeb.R"))
+source(here::here("scripts", "auxiliares.R"))
 ```
 
 ```{css estilo-general, echo=FALSE}
@@ -372,10 +373,14 @@ tabla_paises_variables_num_sector <- tabla_empresas %>% group_by(country_region,
     .groups = "drop"
   )
 
-tabla_info_accionistas <- read_excel(here::here("tablas_input", "auxiliares", "tabla_info_accionistas.xlsx")) %>% 
-                            select(investor_name, ownership_structure, ownership_specific, ownership_family, ownership_multifamily,
+tabla_info_accionistas <- read_excel(
+  here::here("tablas_input", "auxiliares", "tabla_info_accionistas.xlsx")
+  ) %>% 
+  select(investor_name, ownership_structure, ownership_specific, ownership_family, ownership_multifamily,
                                    principal_activity, finance, country, region
-                                   )
+                                   ) %>%
+  mutate(investor_name = parseaNombres(investor_name))
+                        
 
 ```
 
@@ -2556,7 +2561,7 @@ htmltools::div(
 )
 ```
 
-### Tipología de los accionistas
+## Tipología de los accionistas
 
 Para los 500 accionistas más importantes de las empresas hemos establecido una tipología que nos ayudará a comprender cómo se estructuran los inversores. El siguiente gráfico ilustra el número total de accionistas y su valor total invertido según su ownership strucuture.
 
@@ -2732,8 +2737,8 @@ label_auto <- scales::label_number(scale_cut = scales::cut_short_scale())
 
 valores_ownership_specific <- sort(unique(tabla_grafico_accionistas_ownership_specific$ownership_specific))
 
-colores_ownership_specific <- setNames(c("#D1C8CE", "#B3E058", "#AB8ED3", "#D7C17F", "#C24FD7", "#82D1DB", 
-"#DC6F7E", "#8EE1AA"), valores_ownership_specific)
+colores_ownership_specific <- setNames(c("#C552D7", "#D5CCB4", "#D69DCD", "#95E960", "#87C5D4", "#DBD56F", 
+"#83E2B5", "#7C89D2", "#DC716D"), valores_ownership_specific)
 
 vectorColores <- function(df, var_col, colores){
   colores_df <- tibble(campo = names(colores), color = colores)
@@ -3606,7 +3611,7 @@ htmltools::div(
 )
 ```
 
-### Accionistas y grupos familiares
+## Accionistas y grupos familiares
 
 De los 500 accionistas principales, algunos pertenecen a grupos familiares. El siguiente grafo muestra las conexiones de las principales familias inversores con las empresas en las que tienen participación. Como en el grafo anterior, puede filtrar los nodos separadamente por empresa o por familia.
 
@@ -3618,18 +3623,18 @@ De los 500 accionistas principales, algunos pertenecen a grupos familiares. El s
 tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 tabla_accionistas_filtrada_familias <- tabla_accionistas_filtrada %>%
-  filter(ownership_family != "no")
+  filter(ownership_holder_or_family != "no")
 
 nodes_grafo_accionistas_familias <- bind_rows(
           tibble(id = unique(tabla_accionistas_filtrada_familias$empresa_principal), group = "Empresa"),
-          tibble(id = unique(tabla_accionistas_filtrada_familias$ownership_family), group = "Familia")
+          tibble(id = unique(tabla_accionistas_filtrada_familias$ownership_holder_or_family), group = "Familia")
     ) %>%
     mutate(label = id) %>%
     distinct(id, .keep_all = TRUE)
 
 edges_grafo_accionistas_familias <- tabla_accionistas_filtrada_familias %>%
   transmute(
-    from = ownership_family,
+    from = ownership_holder_or_family,
     to = empresa_principal,
     value = outstanding,
     title = paste0(outstanding, "% de acciones"),
@@ -3790,19 +3795,19 @@ En este gráfico veremos el total de empresas en los que los principales accioni
 
 ```{r}
 # -----------------------------------------------------------
-# 1. Agrego los datos por grupo familiar (ownership_family) y país
+# 1. Agrego los datos por grupo familiar (ownership_holder_or_family) y país
 # -----------------------------------------------------------
 tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 tabla_grafico_accionistas_familias <- tabla_accionistas_filtrada %>%
-  group_by(ownership_family, empresa_principal_pais) %>%
+  group_by(ownership_holder_or_family, empresa_principal_pais) %>%
   summarise(
     total_count = n_distinct(empresa_principal),
     sum_value = sum(value, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   rename(
-    familia = ownership_family,
+    familia = ownership_holder_or_family,
     pais = empresa_principal_pais
     ) %>%
   filter(familia != "no")
@@ -3988,19 +3993,19 @@ Ahora presentamos un gráfico similar al anterior, pero deslgosado por sectores.
 
 ```{r}
 # -----------------------------------------------------------
-# 1. Agrego los datos por grupo familiar (ownership_family) y sector
+# 1. Agrego los datos por grupo familiar (ownership_holder_or_family) y sector
 # -----------------------------------------------------------
 tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
 
 tabla_grafico_accionistas_familias_sectores <- tabla_accionistas_filtrada %>%
-  group_by(ownership_family, industry_reclassified_2) %>%
+  group_by(ownership_holder_or_family, industry_reclassified_2) %>%
   summarise(
     total_count = n_distinct(empresa_principal),
     sum_value = sum(value, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   rename(
-    familia = ownership_family,
+    familia = ownership_holder_or_family,
     sector = industry_reclassified_2
     ) %>%
   filter(familia != "no")
@@ -4178,20 +4183,214 @@ htmltools::div(
 )
 ```
 
-### Accionistas empresariales (parent firm)
+## Accionistas empresariales (parent firm)
 
-A continuación analizamos con más detalle este tipo de accionistas.
+A continuación analizamos con más detalle este tipo de accionistas. Hemos realizado una búsqueda de los accionistas principales de las compañías que figuran a su vez como accionistas de las empresas principales objeto de este estudio. Con esto, la red que podemos dibujar entre los accionistas principales y sus empresas se vuelve un poco más compleja pero, al mismo tiempo, permite localizar mejor a los accionistas centrales -según sus parámetros topológicos.
 
 ```{r}
-tabla_accionitas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+#-----1. Construyo las tablas del grafo -------#
+
+tabla_accionistas_filtrada <- refinaAccionistasPrincipales(tabla_accionistas, tabla_empresas)
+
+tabla_accionistas_refinado <- read_excel(here::here("tablas_input", "auxiliares", "accionistas_principales_refinado.xlsx")) %>%
+  mutate(
+    investor_name = parseaNombres(investor_name)
+  )
+
+tabla_relaciones_accionistas_ampliada <- tabla_accionistas_refinado %>%
+  separate_rows(mod_ownership_holder_or_family, sep = "\\s*,\\s*") %>%
+  select(investor_name, mod_ownership_holder_or_family, outstanding) %>%
+  filter(mod_ownership_holder_or_family != "no")
+
+nodes_grafo_accionistas_ampliado <- bind_rows(
+  tibble(id = unique(tabla_accionistas_filtrada$empresa_principal), group = "Empresa"),
+  tibble(id = unique(tabla_accionistas_filtrada$investor_name), group = "Accionista"),
+  tibble(id = unique(tabla_relaciones_accionistas_ampliada$mod_ownership_holder_or_family), group = "Accionista") %>% filter(id != "end"),
+) %>%
+  mutate(label = id) %>%
+  distinct(id, .keep_all = TRUE)
+
+edges_grafo_accionistas_ampliado_1 <- tabla_accionistas_filtrada %>%
+  transmute(
+    from = empresa_principal,
+    to = investor_name,
+    value = outstanding,
+    title = if_else(is.na(outstanding), "% de acciones no disponible", paste0(100*outstanding, "% de acciones")),
+    arrows = "to"
+  )
+
+edges_grafo_accionistas_ampliado_2 <- tabla_relaciones_accionistas_ampliada %>%
+  transmute(
+    from = investor_name,
+    to = mod_ownership_holder_or_family,
+    value = outstanding,
+    title = if_else(is.na(outstanding), "% de acciones no disponible", paste0(100*outstanding, "% de acciones")),
+    arrows = "to"
+  )
+
+edges_grafo_accionistas_ampliado <- edges_grafo_accionistas_ampliado_1 %>% bind_rows(edges_grafo_accionistas_ampliado_2) %>%
+  distinct(from, to, .keep_all = TRUE) %>%
+  filter (to != "end")
 
 
 
+# ------------------------------------------------------------
+# 2. IGRAPH: calcular métrica topológica (eigen value)
+# Usamos igraph solo para el cálculo, no para dibujar.
+# ------------------------------------------------------------
+g_igraph_accionistas_ampliado <- graph_from_data_frame(edges_grafo_accionistas_ampliado, directed = TRUE, vertices = nodes_grafo_accionistas_ampliado)
 
+grado_grafo_accionistas_ampliado <- degree(g_igraph_accionistas_ampliado, mode = "all")
+centralidad_grafo_accionistas_ampliado <- page_rank(g_igraph_accionistas_ampliado)
+centralidad_grafo_accionistas_ampliado_valores <- centralidad_grafo_accionistas_ampliado$vector
 
+nodes_grafo_accionistas_ampliado <- nodes_grafo_accionistas_ampliado %>%
+  mutate(
+    value = centralidad_grafo_accionistas_ampliado_valores[id],       # tamaño del nodo = su centralidad page rank
+    title = paste0(
+      "<b>", id, "</b><br>",
+      "Conexiones (grado): ", grado_grafo_accionistas_ampliado[id], "<br>",
+      "Centralidad (page-rank): ", round(1000*centralidad_grafo_accionistas_ampliado_valores[id],2)
+    )
+  )
+
+# Listas alfabéticas separadas por tipo de nodo, para los dos selectores
+empresas_grafo_accionistas_ampliado <- nodes_grafo_accionistas_ampliado %>%
+  filter(group == "Empresa") %>%
+  arrange(id) %>%
+  pull(id)
+
+accionistas_grafo_accionistas_ampliado <- nodes_grafo_accionistas_ampliado %>%
+  filter(group == "Accionista") %>%
+  arrange(id) %>%
+  pull(id)
+
+# ------------------------------------------------------------
+# 3. VISNETWORK: dibujar el grafo interactivo
+# ------------------------------------------------------------
+grafo_red_accionistas_ampliado <- visNetwork(nodes_grafo_accionistas_ampliado, edges_grafo_accionistas_ampliado, width = "100%", height = "600px") %>%
+  visGroups(groupname = "Empresa",    color = "#4a90d9", shape = "dot") %>%
+  visGroups(groupname = "Accionista", color = "#d94a4a", shape = "dot") %>%
+  visNodes(scaling = list(min = 15, max = 300)) %>%   # rango visual de tamaño según 'value'
+  visEdges(smooth = FALSE) %>%
+  visPhysics(
+    solver = "forceAtlas2Based",
+    forceAtlas2Based = list(
+      gravitationalConstant = -2000,   # antes -300: mucha más repulsión
+      centralGravity = 0.005,          # nueva: casi anula el "tirón" hacia el centro
+      springLength = 400,              # antes 250: más distancia ideal por arista
+      springConstant = 0.08,           # antes 0.12: aristas menos rígidas, permite más despliegue
+      avoidOverlap = 1,
+      damping = 0.4                    # nueva: evita que oscile demasiado antes de asentarse
+    ),
+  stabilization = list(enabled = TRUE, iterations = 1000)  # antes 200: con más nodos, dale más tiempo para asentarse
+) %>%
+  visEvents(
+    stabilizationIterationsDone = "function() { this.setOptions({ physics: false }); }"
+  ) %>%
+  visOptions(
+    highlightNearest = list(enabled = TRUE, degree = 1, hover = TRUE),
+    nodesIdSelection  = TRUE,
+      # queda oculto: lo controlamos desde los dos selectores propios (ver bloque JS)
+  ) %>%
+  visLegend(
+    main = list(text = "", style = "font-size: 8px;"),
+    width = 0.16,      # antes por defecto 0.2 → ocupa menos ancho del canvas
+    position = "right",
+    stepX = 100,         # separación horizontal entre entradas
+    stepY = 100,         # separación vertical entre entradas
+    zoom = FALSE        # evita que el zoom del grafo agrande los nodos de la leyenda
+  ) %>%
+  visLayout(randomSeed = 321)
+  
+htmltools::div(
+  class = "card",
+  htmltools::div(class = "card-title", "Red Ampliada de accionistas y empresas"),
+  htmltools::div(
+    id = "grafo-accionistas-ampliado-controles",
+    style = "display:flex; align-items:center; gap:8px; margin-bottom:16px;",
+    htmltools::tags$select(
+      id = "grafo-selector-empresa-accionistas-ampliado",
+      class = "select-box",
+      htmltools::tags$option(value = "", "-- Seleccionar empresa --"),
+      lapply(empresas_grafo_accionistas_ampliado, function(e) htmltools::tags$option(value = e, e))
+    ),
+    htmltools::tags$select(
+      id = "grafo-selector-accionista-accionistas-ampliado",
+      class = "select-box",
+      htmltools::tags$option(value = "", "-- Seleccionar accionista --"),
+      lapply(accionistas_grafo_accionistas_ampliado, function(a) htmltools::tags$option(value = a, a))
+    )
+  ),
+  htmltools::div(id = "grafo_accionistas_ampliado_container", grafo_red_accionistas_ampliado)
+)
 
 ```
 
+```{=html}
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var contenedorGrafoAccionistasAmpliado    = document.getElementById("grafo_accionistas_ampliado_container");
+  var selectorEmpresaAccionistasAmpliado    = document.getElementById("grafo-selector-empresa-accionistas-ampliado");
+  var selectorAccionistaAccionistasAmpliado = document.getElementById("grafo-selector-accionista-accionistas-ampliado");
+
+  var nodeSelectNativoAccionistasAmpliado = null;
+
+  // El widget visNetwork crea su propio <select> oculto (el que alimenta
+  // nodesIdSelection); su id interno es aleatorio (p.ej. "nodeSelect-htmlwidget-XXXX"),
+  // así que lo localizamos por prefijo dentro del contenedor del grafo.
+  function localizarnodeSelectNativoAccionistasAmpliado() {
+    if (!nodeSelectNativoAccionistasAmpliado) {
+      nodeSelectNativoAccionistasAmpliado = contenedorGrafoAccionistasAmpliado.querySelector('select[id^="nodeSelect"]');
+      if (nodeSelectNativoAccionistasAmpliado) {
+        // Lo ocultamos: la selección la controlamos desde nuestros dos selectores.
+        nodeSelectNativoAccionistasAmpliado.style.display = "none";
+      }
+    }
+    return nodeSelectNativoAccionistasAmpliado;
+  }
+
+  function seleccionarNodoGrafoAccionistasAmpliado(id) {
+    var nativo = localizarnodeSelectNativoAccionistasAmpliado();
+    if (!nativo) return;
+    nativo.value = id;
+    nativo.onchange();
+  }
+
+  selectorEmpresaAccionistasAmpliado.addEventListener("change", function() {
+    if (selectorEmpresaAccionistasAmpliado.value !== "") {
+      selectorAccionistaAccionistasAmpliado.value = "";
+    }
+    seleccionarNodoGrafoAccionistasAmpliado(selectorEmpresaAccionistasAmpliado.value);
+  });
+
+  selectorAccionistaAccionistasAmpliado.addEventListener("change", function() {
+    if (selectorAccionistaAccionistasAmpliado.value !== "") {
+      selectorEmpresaAccionistasAmpliado.value = "";
+    }
+    seleccionarNodoGrafoAccionistasAmpliado(selectorAccionistaAccionistasAmpliado.value);
+  });
+
+  var intentosGrafoAccionistasAmpliado = 0;
+  var intervaloGrafoAccionistasAmpliado = setInterval(function() {
+    intentosGrafoAccionistasAmpliado++;
+    if (localizarnodeSelectNativoAccionistasAmpliado() || intentosGrafoAccionistasAmpliado > 40) {
+      clearInterval(intervaloGrafoAccionistasAmpliado);
+    }
+  }, 150);
+});
+</script>
+```
+
+```{=html}
+<div class="insight">
+Sobre este grafo, hay que tener en cuenta que:<br>
+* Para buscar los accionistas principales de las empresas que a su vez figuran como accionistas de las compañías objeto del estudio fuimos directamente al grupo matriz, saltádonos algunas empresas que podrían hacer de intermediarios. Esto simplifica un poco el grafo respecto al entramado corporativo real, pero sigue siendo válido en términos de análisis.<br>
+** En la búsqueda anterior, sólo se tuvieron en cuenta los accionistas más relevantes en términos de participación.<br>
+*** La centralidad page rank mostrada cuando pasamos el cursor en un nodo está escalada por 1000.<br>
+**** El cálculo de los parámetros topológicos no cuenta con ponderaciones en las aristas. Esto se podría realizar tomando en cuenta el porcentaje de participación de los accionsitas en sus respectivas empresas. Sin embargo, para tomar en cuenta esto, haría falta completar antes la base de datos con esta información.
+</div>
+```
 
 ```{=html}
 </div>
