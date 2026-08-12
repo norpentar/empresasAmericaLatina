@@ -5,6 +5,7 @@ date: "2026-07-25"
 output:
   html_document:
     theme: null
+    self_contained: true
     df_print: default
     toc: false
     toc_float:
@@ -4387,8 +4388,22 @@ document.addEventListener("DOMContentLoaded", function() {
 Sobre este grafo, hay que tener en cuenta que:<br>
 * Para buscar los accionistas principales de las empresas que a su vez figuran como accionistas de las compañías objeto del estudio fuimos directamente al grupo matriz, saltádonos algunas empresas que podrían hacer de intermediarios. Esto simplifica un poco el grafo respecto al entramado corporativo real, pero sigue siendo válido en términos de análisis.<br>
 ** En la búsqueda anterior, sólo se tuvieron en cuenta los accionistas más relevantes en términos de participación.<br>
-*** La centralidad page rank mostrada cuando pasamos el cursor en un nodo está escalada por 1000.<br>
+*** El tamaño de los nodos es proporcional a su centralidad page rank. Esta se muestra, multiplicada por 1000, cuando pasamos el cursor en un nodo.<br>
 **** El cálculo de los parámetros topológicos no cuenta con ponderaciones en las aristas. Esto se podría realizar tomando en cuenta el porcentaje de participación de los accionsitas en sus respectivas empresas. Sin embargo, para tomar en cuenta esto, haría falta completar antes la base de datos con esta información.
+</div>
+```
+
+En la siguiente imagen podemos ver la red distribuida según el algoritmo de visualización Yifan Hu, con los nodos según la centralidad page-rank. Los accionistas (color rosado) del centro forman parte del centro de gravedad de la red, mientras que en los bordes podemos ver a aquellas empresas e inversores que cumplen un papel más periférico.
+
+```{=html}
+<div style="text-align:center; margin: 2rem 0;">
+  <img src="./grafo_yifan_hu.png" alt="Red de accionistas" style="max-width:100%; border-radius:8px;">
+</div>
+```
+
+```{=html}
+<div class="insight">
+Esta imagen fue creada con Gephi, un programa open source especializado en la visualización y análisis topológico de redes.
 </div>
 ```
 
