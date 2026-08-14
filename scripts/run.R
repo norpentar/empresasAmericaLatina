@@ -1,4 +1,4 @@
-library(profvis)
+#library(profvis)
 library(qs2)
 
 #profvis({
@@ -54,6 +54,7 @@ qs_save(tabla_financials_dolares, file = here::here("export", "objetos", "tabla_
 tabla_financials_dolares_ajustados <- lista_empresas_principales$entidadesFinancialsTabulado("dolares_ajustados")
 qs_save(tabla_financials_dolares_ajustados, file = here::here("export", "objetos", "tabla_financials_dolares_ajustados.qs2"))
 
+source("./scripts/auxiliares_cargaDatosNeo4j.R")
 
 #})
 

@@ -4401,6 +4401,16 @@ En la siguiente imagen podemos ver la red distribuida según el algoritmo de vis
 </div>
 ```
 
+Aunque la imagen previa ya nos da una idea, en la siguiente tabla podemos ver mejor quiénes los principales accionistas de la red.
+
+```{r}
+
+
+
+
+```
+
+
 ```{=html}
 <div class="insight">
 Esta imagen fue creada con Gephi, un programa open source especializado en la visualización y análisis topológico de redes.
